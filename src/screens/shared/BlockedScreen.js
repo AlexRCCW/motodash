@@ -1,15 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { t } from '../../i18n';
 
 export default function BlockedScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.icon}>🚫</Text>
-      <Text style={styles.title}>Device blocked</Text>
-      <Text style={styles.body}>
-        This device ID has been blocked from using the app.
-        If you believe this is an error, please contact support.
-      </Text>
+      <Text style={styles.title}>{t('account.blocked')}</Text>
+      <Text style={styles.body}>{t('account.blockedMsg')}</Text>
     </View>
   );
 }

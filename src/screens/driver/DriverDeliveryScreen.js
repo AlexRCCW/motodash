@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import { watchLocation, haversineMeters } from '../../services/locationService';
 import { markDeliveryCompleteDriver } from '../../services/jobService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { t } from '../../i18n';
 
 const COMPLETION_GEOFENCE_METERS = 6.1;
 
@@ -72,25 +73,25 @@ export default function DriverDeliveryScreen({ navigation, route }) {
 
   function getInstruction() {
     switch (phase) {
-      case 'to_store':     return '📍 Go to the store and pick up the order';
-      case 'to_client':    return '🏠 Deliver the order to the client';
-      case 'return_store': return '🏪 Return to the store with the payment';
+      case 'to_store':     return t('driverDelivery.toStore');
+      case 'to_client':    return t('driverDelivery.toClient');
+      case 'return_store': return t('driverDelivery.returnStore');
     }
   }
 
   function getButtonLabel() {
     switch (phase) {
-      case 'to_store':     return 'Mark items picked up';
-      case 'to_client':    return 'Mark delivery made';
-      case 'return_store': return 'Mark delivery complete';
+      case 'to_store':     return t('driverDelivery.markPickedUp');
+      case 'to_client':    return t('driverDelivery.markDelivered');
+      case 'return_store': return t('driverDelivery.markComplete');
     }
   }
 
   function getWaitingLabel() {
     switch (phase) {
-      case 'to_store':     return 'Arrive at store to continue';
-      case 'to_client':    return 'Arrive at client to continue';
-      case 'return_store': return 'Return to store to complete';
+      case 'to_store':     return t('driverDelivery.arriveAtStore');
+      case 'to_client':    return t('driverDelivery.arriveAtClient');
+      case 'return_store': return t('driverDelivery.returnToStore');
     }
   }
 
@@ -101,10 +102,10 @@ export default function DriverDeliveryScreen({ navigation, route }) {
     } else if (phase === 'to_client') {
       // Show photo reminder before marking delivered
       Alert.alert(
-        'Take a photo',
-        'Please take a photo of the delivery as proof before marking it complete. Store the photo on your device.',
+        t('driverDelivery.takePhoto'),
+        t('driverDelivery.takePhotoMsg'),
         [
-          { text: 'Got it', onPress: () => setPhase('return_store') }
+          { text: t('driverDelivery.gotIt'), onPress: () => setPhase('return_store') }
         ]
       );
       setCanAdvance(false);
@@ -122,9 +123,9 @@ export default function DriverDeliveryScreen({ navigation, route }) {
 
     if (error) {
       Alert.alert(
-        'Error',
-        'Could not mark delivery complete. Please try again.',
-        [{ text: 'Retry', onPress: () => handleAdComplete() }]
+        t('shared.error'),
+        t('driverDelivery.couldNotComplete'),
+        [{ text: t('shared.retry'), onPress: () => handleAdComplete() }]
       );
       setCompleting(false);
       return;
@@ -135,7 +136,7 @@ export default function DriverDeliveryScreen({ navigation, route }) {
   }
 
   if (!job) {
-    return <View style={styles.centered}><Text>No job data found.</Text></View>;
+    return <View style={styles.centered}><Text>{t('shared.noJobData')}</Text></View>;
   }
 
   const target = getTargetCoords();
@@ -146,10 +147,10 @@ export default function DriverDeliveryScreen({ navigation, route }) {
       {/* Ad modal */}
       <Modal visible={showAd} animationType="slide" transparent={false}>
         <View style={styles.adContainer}>
-          <Text style={styles.adTitle}>MotoDash Partner Ad</Text>
-          <Text style={styles.adSubtitle}>Video interstitial shown here</Text>
+          <Text style={styles.adTitle}>{t('shared.adTitle')}</Text>
+          <Text style={styles.adSubtitle}>{t('shared.adSubtitle')}</Text>
           <TouchableOpacity style={styles.adButton} onPress={handleAdComplete}>
-            <Text style={styles.adButtonText}>Ad complete</Text>
+            <Text style={styles.adButtonText}>{t('shared.adComplete')}</Text>
           </TouchableOpacity>
         </View>
       </Modal>
@@ -189,13 +190,13 @@ export default function DriverDeliveryScreen({ navigation, route }) {
         {/* Order summary */}
         <View style={styles.orderRow}>
           <View style={styles.orderItem}>
-            <Text style={styles.infoLabel}>Order total</Text>
+            <Text style={styles.infoLabel}>{t('driverDelivery.orderTotal')}</Text>
             <Text style={styles.infoValue}>
-              {job.order_total ? `$${job.order_total}` : 'TBD'}
+              {job.order_total ? `$${job.order_total}` : t('driverDelivery.tbd')}
             </Text>
           </View>
           <View style={styles.orderItem}>
-            <Text style={styles.infoLabel}>Items</Text>
+            <Text style={styles.infoLabel}>{t('driverDelivery.items')}</Text>
             <Text style={styles.infoValue}>
               {Array.isArray(job.items) ? job.items.length : 0}
             </Text>
@@ -204,7 +205,7 @@ export default function DriverDeliveryScreen({ navigation, route }) {
 
         {job.order_notes ? (
           <View style={styles.notesBox}>
-            <Text style={styles.infoLabel}>Order notes</Text>
+            <Text style={styles.infoLabel}>{t('driverDelivery.orderNotes')}</Text>
             <Text style={styles.notesText}>{job.order_notes}</Text>
           </View>
         ) : null}
@@ -212,8 +213,7 @@ export default function DriverDeliveryScreen({ navigation, route }) {
         {phase === 'return_store' && (
           <View style={styles.paymentReminder}>
             <Text style={styles.paymentReminderText}>
-              💰 Collect ${job.order_total} from client and return it to the store.
-              Make sure the store marks the delivery as paid.
+              {t('driverDelivery.collectPayment', { amount: job.order_total })}
             </Text>
           </View>
         )}

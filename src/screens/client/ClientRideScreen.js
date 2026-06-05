@@ -9,6 +9,7 @@ import { useAuth } from '../../context/AuthContext';
 import { requestLocationPermission, getCurrentLocation } from '../../services/locationService';
 import { createRideJob, cancelRideJob, markRideCompleteClient, getRideJob } from '../../services/jobService';
 import { supabase } from '../../config/supabase';
+import { t } from '../../i18n';
 
 export default function ClientRideScreen({ navigation, route }) {
   const { account } = useAuth();
@@ -59,7 +60,7 @@ export default function ClientRideScreen({ navigation, route }) {
   async function initLocation() {
     const hasPermission = await requestLocationPermission();
     if (!hasPermission) {
-      Alert.alert('Location required', 'Please enable location to request a ride.');
+      Alert.alert(t('shared.locationRequired'), t('clientRide.locationRequiredMsg'));
       return;
     }
     const loc = await getCurrentLocation();
@@ -73,7 +74,7 @@ export default function ClientRideScreen({ navigation, route }) {
 
   async function handleRequestRide() {
     if (!location) {
-      Alert.alert('Location unavailable', 'Please wait for your location to load.');
+      Alert.alert(t('clientRide.locationUnavailable'), t('clientRide.locationUnavailableMsg'));
       return;
     }
     setStatus('requesting');
@@ -84,7 +85,7 @@ export default function ClientRideScreen({ navigation, route }) {
       clientNotes: '',
     });
     if (error || !data) {
-      Alert.alert('Error', 'Could not create ride request. Please try again.');
+      Alert.alert(t('shared.error'), t('clientRide.couldNotCreate'));
       setStatus('idle');
       return;
     }
@@ -96,10 +97,10 @@ export default function ClientRideScreen({ navigation, route }) {
   }
 
   async function handleCancel() {
-    Alert.alert('Cancel ride?', 'Are you sure you want to cancel this request?', [
-      { text: 'No' },
+    Alert.alert(t('clientRide.cancelRide'), t('clientRide.cancelConfirm'), [
+      { text: t('shared.no') },
       {
-        text: 'Yes, cancel',
+        text: t('clientRide.yesCancel'),
         style: 'destructive',
         onPress: async () => {
           await cancelRideJob(job.id);
@@ -126,8 +127,8 @@ export default function ClientRideScreen({ navigation, route }) {
     setCompleting(true);
     const { error } = await markRideCompleteClient(job.id);
     if (error) {
-      Alert.alert('Error', 'Could not complete the ride. Please try again.',
-        [{ text: 'Retry', onPress: () => handleAdComplete() }]
+      Alert.alert(t('shared.error'), t('clientRide.couldNotComplete'),
+        [{ text: t('shared.retry'), onPress: () => handleAdComplete() }]
       );
       setCompleting(false);
       return;
@@ -142,10 +143,10 @@ export default function ClientRideScreen({ navigation, route }) {
       {/* Ad modal */}
       <Modal visible={showAd} animationType="slide" transparent={false}>
         <View style={styles.adContainer}>
-          <Text style={styles.adTitle}>MotoDash Partner Ad</Text>
-          <Text style={styles.adSubtitle}>Video interstitial shown here</Text>
+          <Text style={styles.adTitle}>{t('shared.adTitle')}</Text>
+          <Text style={styles.adSubtitle}>{t('shared.adSubtitle')}</Text>
           <TouchableOpacity style={styles.adButton} onPress={handleAdComplete}>
-            <Text style={styles.adButtonText}>Continue</Text>
+            <Text style={styles.adButtonText}>{t('shared.continue')}</Text>
           </TouchableOpacity>
         </View>
       </Modal>
@@ -180,7 +181,7 @@ export default function ClientRideScreen({ navigation, route }) {
       <View style={styles.panel}>
         {status === 'idle' && (
           <>
-            <Text style={styles.panelTitle}>Ready for a ride?</Text>
+            <Text style={styles.panelTitle}>{t('clientRide.readyForRide')}</Text>
             {!location ? (
               <ActivityIndicator color="#2563eb" style={{ marginBottom: 16 }} />
             ) : null}
@@ -189,13 +190,13 @@ export default function ClientRideScreen({ navigation, route }) {
               onPress={handleRequestRide}
               disabled={!location}
             >
-              <Text style={styles.primaryBtnText}>Request a ride</Text>
+              <Text style={styles.primaryBtnText}>{t('clientRide.requestRide')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.backBtn}
               onPress={() => navigation.goBack()}
             >
-              <Text style={styles.backBtnText}>Back</Text>
+              <Text style={styles.backBtnText}>{t('auth.back')}</Text>
             </TouchableOpacity>
           </>
         )}
@@ -203,34 +204,32 @@ export default function ClientRideScreen({ navigation, route }) {
         {status === 'requesting' && (
           <View style={styles.centeredPanel}>
             <ActivityIndicator size="large" color="#2563eb" />
-            <Text style={styles.statusText}>Creating your request...</Text>
+            <Text style={styles.statusText}>{t('clientRide.creatingRequest')}</Text>
           </View>
         )}
 
         {status === 'waiting' && (
           <>
-            <Text style={styles.panelTitle}>Looking for a driver...</Text>
-            <Text style={styles.statusSubtext}>
-              You will be notified when a driver accepts
-            </Text>
+            <Text style={styles.panelTitle}>{t('clientRide.lookingForDriver')}</Text>
+            <Text style={styles.statusSubtext}>{t('clientRide.willBeNotified')}</Text>
             <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel}>
-              <Text style={styles.cancelBtnText}>Cancel request</Text>
+              <Text style={styles.cancelBtnText}>{t('clientRide.cancelRequest')}</Text>
             </TouchableOpacity>
           </>
         )}
 
         {status === 'accepted' && (
           <>
-            <Text style={styles.panelTitle}>Driver is on the way 🏍️</Text>
+            <Text style={styles.panelTitle}>{t('clientRide.driverOnWay')}</Text>
             <Text style={styles.statusSubtext}>
-              Your driver is {job?.initial_distance_km?.toFixed(1)} km away
+              {t('clientRide.driverAway', { distance: job?.initial_distance_km?.toFixed(1) })}
             </Text>
             <TouchableOpacity
               style={[styles.primaryBtn, completing && styles.primaryBtnDisabled]}
               onPress={handleMarkComplete}
               disabled={completing}
             >
-              <Text style={styles.primaryBtnText}>Mark ride complete</Text>
+              <Text style={styles.primaryBtnText}>{t('clientRide.markComplete')}</Text>
             </TouchableOpacity>
           </>
         )}

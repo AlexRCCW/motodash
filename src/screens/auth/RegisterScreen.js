@@ -6,15 +6,10 @@ import {
 import { register } from '../../services/authService';
 import { getDeviceId } from '../../services/deviceService';
 import * as Location from 'expo-location';
+import { t } from '../../i18n';
 
-const ACCOUNT_TYPES = [
-  { key: 'client', label: 'Client',  desc: 'I need rides and deliveries' },
-  { key: 'driver', label: 'Driver',  desc: 'I provide rides and deliveries' },
-  { key: 'store',  label: 'Store',   desc: 'I sell items for delivery' },
-];
-
+const ACCOUNT_TYPE_KEYS = ['client', 'driver', 'store'];
 const DAYS = ['mon','tue','wed','thu','fri','sat','sun'];
-const DAY_LABELS = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' };
 
 export default function RegisterScreen({ navigation }) {
   const [step, setStep]               = useState('type');   // 'type' | 'form'
@@ -52,7 +47,7 @@ export default function RegisterScreen({ navigation }) {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') {
       setLocationStatus('error');
-      Alert.alert('Permission denied', 'Location permission is required to set your store location.');
+      Alert.alert(t('register.locationRequired'), t('register.locationRequiredMsg'));
       return;
     }
     const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
@@ -69,20 +64,20 @@ export default function RegisterScreen({ navigation }) {
 
   async function handleRegister() {
     if (!name || !phone || !email || !password) {
-      Alert.alert('Missing fields', 'Please fill in all required fields.');
+      Alert.alert(t('auth.missingFields'), t('auth.pleaseFillAll'));
       return;
     }
     if (accountType === 'driver' && (!motorcycleType || !cedulaNumber)) {
-      Alert.alert('Missing fields', 'Please fill in your motorcycle type and cedula number.');
+      Alert.alert(t('auth.missingFields'), t('register.missingDriverFields'));
       return;
     }
     if (accountType === 'store') {
       if (!storeName || !openHour || !closeHour || daysOpen.length === 0) {
-        Alert.alert('Missing fields', 'Please fill in all store details.');
+        Alert.alert(t('auth.missingFields'), t('register.missingStoreFields'));
         return;
       }
       if (!storeLat || !storeLng) {
-        Alert.alert('Location required', 'Please capture your store location before registering.');
+        Alert.alert(t('register.locationRequired'), t('register.locationRequiredForStore'));
         return;
       }
     }
@@ -100,10 +95,10 @@ export default function RegisterScreen({ navigation }) {
     setLoading(false);
 
     if (error) {
-      Alert.alert('Registration failed', error);
+      Alert.alert(t('auth.registrationFailed'), error);
     } else {
-      Alert.alert('Success', 'Account created! Please sign in.', [
-        { text: 'OK', onPress: () => navigation.replace('Login') }
+      Alert.alert(t('auth.createAccount'), t('auth.accountCreated'), [
+        { text: t('shared.ok'), onPress: () => navigation.replace('Login') }
       ]);
     }
   }
@@ -112,18 +107,18 @@ export default function RegisterScreen({ navigation }) {
   if (step === 'type') {
     return (
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>Create account</Text>
-        <Text style={styles.subtitle}>What best describes you?</Text>
-        {ACCOUNT_TYPES.map(type => (
+        <Text style={styles.title}>{t('auth.createAccount')}</Text>
+        <Text style={styles.subtitle}>{t('register.chooseType')}</Text>
+        {ACCOUNT_TYPE_KEYS.map(key => (
           <TouchableOpacity
-            key={type.key}
-            style={[styles.typeCard, accountType === type.key && styles.typeCardSelected]}
-            onPress={() => setAccountType(type.key)}
+            key={key}
+            style={[styles.typeCard, accountType === key && styles.typeCardSelected]}
+            onPress={() => setAccountType(key)}
           >
-            <Text style={[styles.typeLabel, accountType === type.key && styles.typeLabelSelected]}>
-              {type.label}
+            <Text style={[styles.typeLabel, accountType === key && styles.typeLabelSelected]}>
+              {t('register.' + key)}
             </Text>
-            <Text style={styles.typeDesc}>{type.desc}</Text>
+            <Text style={styles.typeDesc}>{t('register.' + key + 'Desc')}</Text>
           </TouchableOpacity>
         ))}
         <TouchableOpacity
@@ -131,10 +126,10 @@ export default function RegisterScreen({ navigation }) {
           disabled={!accountType}
           onPress={() => setStep('form')}
         >
-          <Text style={styles.buttonText}>Continue</Text>
+          <Text style={styles.buttonText}>{t('auth.continue')}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.link} onPress={() => navigation.goBack()}>
-          <Text style={styles.linkText}>Back to login</Text>
+          <Text style={styles.linkText}>{t('auth.back')}</Text>
         </TouchableOpacity>
       </ScrollView>
     );
@@ -143,51 +138,47 @@ export default function RegisterScreen({ navigation }) {
   // ── STEP 2: registration form ──
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>
-        {accountType.charAt(0).toUpperCase() + accountType.slice(1)} registration
-      </Text>
+      <Text style={styles.title}>{t('auth.createAccount')}</Text>
 
       {/* Shared fields */}
-      <Text style={styles.sectionLabel}>Your details</Text>
-      <TextInput style={styles.input} placeholder="Full name" placeholderTextColor="#999"
+      <Text style={styles.sectionLabel}>{t('register.yourDetails')}</Text>
+      <TextInput style={styles.input} placeholder={t('register.fullName')} placeholderTextColor="#999"
         value={name} onChangeText={setName} />
-      <TextInput style={styles.input} placeholder="Phone number" placeholderTextColor="#999"
+      <TextInput style={styles.input} placeholder={t('register.phoneNumber')} placeholderTextColor="#999"
         keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
-      <TextInput style={styles.input} placeholder="Email address" placeholderTextColor="#999"
+      <TextInput style={styles.input} placeholder={t('register.emailAddress')} placeholderTextColor="#999"
         keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail} />
-      <TextInput style={styles.input} placeholder="Password" placeholderTextColor="#999"
+      <TextInput style={styles.input} placeholder={t('auth.password')} placeholderTextColor="#999"
         secureTextEntry value={password} onChangeText={setPassword} />
 
       {/* Device ID — read only */}
-      <Text style={styles.deviceLabel}>Device ID (auto-detected)</Text>
+      <Text style={styles.deviceLabel}>{t('register.deviceId')}</Text>
       <View style={styles.deviceIdBox}>
-        <Text style={styles.deviceIdText}>{deviceId || 'Loading...'}</Text>
+        <Text style={styles.deviceIdText}>{deviceId || t('shared.loading')}</Text>
       </View>
-      <Text style={styles.deviceNote}>
-        We store your device ID to keep the app safe and prevent abuse.
-      </Text>
+      <Text style={styles.deviceNote}>{t('register.deviceIdNote')}</Text>
 
       {/* Driver-specific */}
       {accountType === 'driver' && (
         <>
-          <Text style={styles.sectionLabel}>Driver details</Text>
-          <TextInput style={styles.input} placeholder="Motorcycle type" placeholderTextColor="#999"
+          <Text style={styles.sectionLabel}>{t('register.driverDetails')}</Text>
+          <TextInput style={styles.input} placeholder={t('register.motorcycleType')} placeholderTextColor="#999"
             value={motorcycleType} onChangeText={setMotorcycleType} />
-          <TextInput style={styles.input} placeholder="Cedula number" placeholderTextColor="#999"
+          <TextInput style={styles.input} placeholder={t('register.cedulaNumber')} placeholderTextColor="#999"
             value={cedulaNumber} onChangeText={setCedulaNumber} />
-          <Text style={styles.sectionLabel}>Jobs I accept</Text>
+          <Text style={styles.sectionLabel}>{t('register.jobsAccepted')}</Text>
           <View style={styles.row}>
             <TouchableOpacity
               style={[styles.toggleBtn, acceptsRides && styles.toggleBtnOn]}
               onPress={() => setAcceptsRides(!acceptsRides)}
             >
-              <Text style={styles.toggleText}>Rides {acceptsRides ? '✓' : ''}</Text>
+              <Text style={styles.toggleText}>{t('register.rides')} {acceptsRides ? '✓' : ''}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.toggleBtn, acceptsDeliveries && styles.toggleBtnOn]}
               onPress={() => setAcceptsDeliveries(!acceptsDeliveries)}
             >
-              <Text style={styles.toggleText}>Deliveries {acceptsDeliveries ? '✓' : ''}</Text>
+              <Text style={styles.toggleText}>{t('register.deliveries')} {acceptsDeliveries ? '✓' : ''}</Text>
             </TouchableOpacity>
           </View>
         </>
@@ -196,14 +187,14 @@ export default function RegisterScreen({ navigation }) {
       {/* Store-specific */}
       {accountType === 'store' && (
         <>
-          <Text style={styles.sectionLabel}>Store details</Text>
-          <TextInput style={styles.input} placeholder="Store name" placeholderTextColor="#999"
+          <Text style={styles.sectionLabel}>{t('register.storeDetails')}</Text>
+          <TextInput style={styles.input} placeholder={t('register.storeName')} placeholderTextColor="#999"
             value={storeName} onChangeText={setStoreName} />
-          <TextInput style={styles.input} placeholder="Opening hour (e.g. 08:00)" placeholderTextColor="#999"
+          <TextInput style={styles.input} placeholder={t('register.openingHour')} placeholderTextColor="#999"
             value={openHour} onChangeText={setOpenHour} />
-          <TextInput style={styles.input} placeholder="Closing hour (e.g. 20:00)" placeholderTextColor="#999"
+          <TextInput style={styles.input} placeholder={t('register.closingHour')} placeholderTextColor="#999"
             value={closeHour} onChangeText={setCloseHour} />
-          <Text style={styles.sectionLabel}>Days open</Text>
+          <Text style={styles.sectionLabel}>{t('register.daysOpen')}</Text>
           <View style={styles.row}>
             {DAYS.map(day => (
               <TouchableOpacity
@@ -211,23 +202,23 @@ export default function RegisterScreen({ navigation }) {
                 style={[styles.dayBtn, daysOpen.includes(day) && styles.dayBtnOn]}
                 onPress={() => toggleDay(day)}
               >
-                <Text style={styles.dayText}>{DAY_LABELS[day]}</Text>
+                <Text style={styles.dayText}>{t('register.days.' + day)}</Text>
               </TouchableOpacity>
             ))}
           </View>
-          <Text style={styles.sectionLabel}>Store location</Text>
+          <Text style={styles.sectionLabel}>{t('register.storeLocation')}</Text>
           <TouchableOpacity style={styles.locationBtn} onPress={captureStoreLocation}>
             {locationStatus === 'loading'
               ? <ActivityIndicator color="#fff" />
               : <Text style={styles.buttonText}>
                   {locationStatus === 'done'
-                    ? `Location set ✓ (${storeLat?.toFixed(5)}, ${storeLng?.toFixed(5)})`
-                    : 'Use my current location'}
+                    ? `${t('register.locationSet')} (${storeLat?.toFixed(5)}, ${storeLng?.toFixed(5)})`
+                    : t('register.useMyLocation')}
                 </Text>
             }
           </TouchableOpacity>
           {locationStatus === 'error' && (
-            <Text style={styles.errorText}>Location permission denied. Please enable it in settings.</Text>
+            <Text style={styles.errorText}>{t('register.locationPermissionDenied')}</Text>
           )}
         </>
       )}
@@ -239,12 +230,12 @@ export default function RegisterScreen({ navigation }) {
       >
         {loading
           ? <ActivityIndicator color="#fff" />
-          : <Text style={styles.buttonText}>Create account</Text>
+          : <Text style={styles.buttonText}>{t('auth.createAccount')}</Text>
         }
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.link} onPress={() => setStep('type')}>
-        <Text style={styles.linkText}>Back</Text>
+        <Text style={styles.linkText}>{t('auth.back')}</Text>
       </TouchableOpacity>
     </ScrollView>
   );

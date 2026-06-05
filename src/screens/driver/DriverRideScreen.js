@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import { watchLocation, haversineMeters } from '../../services/locationService';
 import { markRideCompleteDriver } from '../../services/jobService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { t } from '../../i18n';
 
 const COMPLETION_GEOFENCE_METERS = 6.1;
 
@@ -67,9 +68,9 @@ export default function DriverRideScreen({ navigation, route }) {
     if (error) {
       // If call fails, keep open_job true so we can retry on relaunch
       Alert.alert(
-        'Error',
-        'Could not mark the ride complete. Please try again.',
-        [{ text: 'Retry', onPress: () => handleAdComplete() }]
+        t('shared.error'),
+        t('driverRide.couldNotComplete'),
+        [{ text: t('shared.retry'), onPress: () => handleAdComplete() }]
       );
       setCompleting(false);
       return;
@@ -87,7 +88,7 @@ export default function DriverRideScreen({ navigation, route }) {
   if (!job) {
     return (
       <View style={styles.centered}>
-        <Text>No job data found.</Text>
+        <Text>{t('shared.noJobData')}</Text>
       </View>
     );
   }
@@ -98,14 +99,14 @@ export default function DriverRideScreen({ navigation, route }) {
       {/* Ad modal — replace with real ad SDK */}
       <Modal visible={showAd} animationType="slide" transparent={false}>
         <View style={styles.adContainer}>
-          <Text style={styles.adTitle}>MotoDash Partner Ad</Text>
-          <Text style={styles.adSubtitle}>Video interstitial shown here</Text>
+          <Text style={styles.adTitle}>{t('shared.adTitle')}</Text>
+          <Text style={styles.adSubtitle}>{t('shared.adSubtitle')}</Text>
           <Text style={styles.adNote}>
             Replace with your ad SDK.{'\n'}
             Call handleAdComplete() when the ad finishes.
           </Text>
           <TouchableOpacity style={styles.adButton} onPress={handleAdComplete}>
-            <Text style={styles.adButtonText}>Ad complete</Text>
+            <Text style={styles.adButtonText}>{t('shared.adComplete')}</Text>
           </TouchableOpacity>
         </View>
       </Modal>
@@ -141,15 +142,15 @@ export default function DriverRideScreen({ navigation, route }) {
 
       {/* Info panel */}
       <View style={styles.infoPanel}>
-        <Text style={styles.instruction}>Go to the client location</Text>
+        <Text style={styles.instruction}>{t('driverRide.goToClient')}</Text>
         <View style={styles.infoRow}>
           <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Distance</Text>
+            <Text style={styles.infoLabel}>{t('driverRide.distance')}</Text>
             <Text style={styles.infoValue}>{job.initial_distance_km?.toFixed(1)} km</Text>
           </View>
           {job.client_notes ? (
             <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>Notes</Text>
+              <Text style={styles.infoLabel}>{t('driverRide.notes')}</Text>
               <Text style={styles.infoValue} numberOfLines={2}>{job.client_notes}</Text>
             </View>
           ) : null}
@@ -165,13 +166,13 @@ export default function DriverRideScreen({ navigation, route }) {
             disabled={completing}
           >
             <Text style={styles.completeBtnText}>
-              {completing ? 'Completing...' : 'Mark ride complete'}
+              {completing ? t('driverRide.completing') : t('driverRide.markComplete')}
             </Text>
           </TouchableOpacity>
         ) : (
           <View style={styles.waitingBtn}>
             <Text style={styles.waitingBtnText}>
-              Arrive at client location to complete
+              {t('driverRide.arriveToComplete')}
             </Text>
           </View>
         )}

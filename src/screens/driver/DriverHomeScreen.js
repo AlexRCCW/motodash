@@ -9,6 +9,7 @@ import { logout } from '../../services/authService';
 import { requestLocationPermission, getCurrentLocation } from '../../services/locationService';
 import { setDriverReady, setDriverNotReady, incrementDriverRefusals, acceptRideJob, acceptDeliveryJob } from '../../services/jobService';
 import { registerForPushNotifications, setupNotificationListeners } from '../../services/notificationService';
+import { t } from '../../i18n';
 
 const OFFER_TIMEOUT_SECONDS = 15;
 
@@ -64,10 +65,7 @@ export default function DriverHomeScreen({ navigation }) {
     setJobOffer(null);
     const { limitReached } = await incrementDriverRefusals(account.id);
     if (limitReached) {
-      Alert.alert(
-        'Marked unavailable',
-        'You have refused 3 jobs in a row and have been marked as not ready.'
-      );
+      Alert.alert(t('driverHome.markedUnavailable'), t('driverHome.refusedTooMany'));
       setStatus('idle');
     }
   }
@@ -90,7 +88,7 @@ export default function DriverHomeScreen({ navigation }) {
       if (!error && data) {
         navigation.navigate('DriverRide', { job: data });
       } else {
-        Alert.alert('Job no longer available', 'Another driver accepted this job.');
+        Alert.alert(t('driverHome.jobUnavailable'), t('driverHome.jobTaken'));
       }
     } else if (jobOffer.type === 'delivery_offer') {
       const { data, error } = await acceptDeliveryJob({
@@ -102,7 +100,7 @@ export default function DriverHomeScreen({ navigation }) {
       if (!error && data) {
         navigation.navigate('DriverDelivery', { job: data });
       } else {
-        Alert.alert('Job no longer available', 'Another driver accepted this job.');
+        Alert.alert(t('driverHome.jobUnavailable'), t('driverHome.jobTaken'));
       }
     }
   }
@@ -112,14 +110,14 @@ export default function DriverHomeScreen({ navigation }) {
 
     const hasPermission = await requestLocationPermission();
     if (!hasPermission) {
-      Alert.alert('Location required', 'Please enable location to receive jobs.');
+      Alert.alert(t('shared.locationRequired'), t('driverHome.locationRequiredMsg'));
       setStatus('idle');
       return;
     }
 
     const loc = await getCurrentLocation();
     if (!loc) {
-      Alert.alert('Location error', 'Could not get your location. Please try again.');
+      Alert.alert(t('shared.locationError'), t('shared.locationErrorMsg'));
       setStatus('idle');
       return;
     }
@@ -136,7 +134,7 @@ export default function DriverHomeScreen({ navigation }) {
 
     const { error } = await setDriverReady(account.id, loc.lat, loc.lng);
     if (error) {
-      Alert.alert('Error', 'Could not update your status. Please try again.');
+      Alert.alert(t('shared.error'), t('driverHome.statusUpdateError'));
       setStatus('idle');
       return;
     }
@@ -155,15 +153,14 @@ export default function DriverHomeScreen({ navigation }) {
   const AdModal = () => (
     <Modal visible={showAd} animationType="slide" transparent={false}>
       <View style={styles.adContainer}>
-        <Text style={styles.adTitle}>MotoDash Partner Ad</Text>
-        <Text style={styles.adSubtitle}>Playable ad shown here</Text>
+        <Text style={styles.adTitle}>{t('shared.adTitle')}</Text>
+        <Text style={styles.adSubtitle}>{t('shared.adPlayable')}</Text>
         <Text style={styles.adNote}>
           Replace this with your ad SDK component.{'\n'}
           Call handleAdComplete() when the ad finishes.
         </Text>
-        {/* Simulate ad completion with a button for now */}
         <TouchableOpacity style={styles.adButton} onPress={handleAdComplete}>
-          <Text style={styles.adButtonText}>Ad complete — Go active</Text>
+          <Text style={styles.adButtonText}>{t('shared.adComplete')}</Text>
         </TouchableOpacity>
       </View>
     </Modal>
@@ -176,9 +173,9 @@ export default function DriverHomeScreen({ navigation }) {
       <View style={styles.offerBanner}>
         <View style={styles.offerInfo}>
           <Text style={styles.offerType}>
-            {jobOffer.type === 'ride_offer' ? '🏍️ Ride request' : '📦 Delivery request'}
+            {jobOffer.type === 'ride_offer' ? t('driverHome.rideOffer') : t('driverHome.deliveryOffer')}
           </Text>
-          <Text style={styles.offerDetail}>{jobOffer.distance_km?.toFixed(1)} km away</Text>
+          <Text style={styles.offerDetail}>{t('driverHome.kmAway', { distance: jobOffer.distance_km?.toFixed(1) })}</Text>
         </View>
         <Text style={styles.offerTimer}>{offerTimer}s</Text>
         <View style={styles.offerButtons}>
@@ -186,10 +183,10 @@ export default function DriverHomeScreen({ navigation }) {
             style={styles.refuseBtn}
             onPress={() => handleRefuse(jobOffer)}
           >
-            <Text style={styles.refuseBtnText}>Decline</Text>
+            <Text style={styles.refuseBtnText}>{t('driverHome.decline')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.acceptBtn} onPress={handleAccept}>
-            <Text style={styles.acceptBtnText}>Accept</Text>
+            <Text style={styles.acceptBtnText}>{t('driverHome.accept')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -202,22 +199,22 @@ export default function DriverHomeScreen({ navigation }) {
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>MotoDash</Text>
+        <Text style={styles.headerTitle}>{t('driverHome.title')}</Text>
         <View style={styles.headerRight}>
           <TouchableOpacity
             style={styles.headerBtn}
             onPress={() => navigation.navigate('DriverStats')}
           >
-            <Text style={styles.headerBtnText}>Stats</Text>
+            <Text style={styles.headerBtnText}>{t('driverHome.stats')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.headerBtn}
             onPress={() => navigation.navigate('Instructions')}
           >
-            <Text style={styles.headerBtnText}>Help</Text>
+            <Text style={styles.headerBtnText}>{t('driverHome.help')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.headerBtn} onPress={logout}>
-            <Text style={styles.headerBtnText}>Sign out</Text>
+            <Text style={styles.headerBtnText}>{t('auth.signOut')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -243,7 +240,7 @@ export default function DriverHomeScreen({ navigation }) {
         ) : (
           <View style={styles.mapPlaceholder}>
             <Text style={styles.mapPlaceholderText}>
-              Mark yourself ready to see your location
+              {t('driverHome.markReadyFirst')}
             </Text>
           </View>
         )}
@@ -252,14 +249,14 @@ export default function DriverHomeScreen({ navigation }) {
       {/* Status bar */}
       <View style={styles.statusBar}>
         {status === 'idle' && (
-          <Text style={styles.statusText}>You are offline</Text>
+          <Text style={styles.statusText}>{t('driverHome.offline')}</Text>
         )}
         {status === 'loading' && (
           <ActivityIndicator color="#2563eb" />
         )}
         {status === 'waiting' && (
           <Text style={styles.statusTextActive}>
-            ● Waiting for job requests...
+            {t('driverHome.waiting')}
           </Text>
         )}
       </View>
@@ -271,17 +268,17 @@ export default function DriverHomeScreen({ navigation }) {
       <View style={styles.footer}>
         {status === 'idle' && (
           <TouchableOpacity style={styles.readyBtn} onPress={handleMarkReady}>
-            <Text style={styles.readyBtnText}>Mark ready for work</Text>
+            <Text style={styles.readyBtnText}>{t('driverHome.markReady')}</Text>
           </TouchableOpacity>
         )}
         {status === 'waiting' && (
           <TouchableOpacity style={styles.offlineBtn} onPress={handleGoOffline}>
-            <Text style={styles.offlineBtnText}>Go offline</Text>
+            <Text style={styles.offlineBtnText}>{t('driverHome.goOffline')}</Text>
           </TouchableOpacity>
         )}
         {status === 'loading' && (
           <View style={[styles.readyBtn, { opacity: 0.6 }]}>
-            <Text style={styles.readyBtnText}>Getting your location...</Text>
+            <Text style={styles.readyBtnText}>{t('driverHome.gettingLocation')}</Text>
           </View>
         )}
       </View>

@@ -9,15 +9,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../config/supabase';
 import { markDeliveryCompleteClient } from '../../services/jobService';
+import { t } from '../../i18n';
 
 // Order statuses: pending | accepted | out_for_delivery | delivered | canceled | returned
-const STATUS_LABELS = {
-  pending:          { label: 'Pending store confirmation', color: '#d97706', bg: '#fef3c7' },
-  accepted:         { label: 'Store is preparing order',   color: '#2563eb', bg: '#eff6ff' },
-  out_for_delivery: { label: 'Out for delivery 🏍️',        color: '#7c3aed', bg: '#f5f3ff' },
-  delivered:        { label: 'Delivered',                  color: '#16a34a', bg: '#dcfce7' },
-  canceled:         { label: 'Canceled',                   color: '#dc2626', bg: '#fee2e2' },
-  returned:         { label: 'Returned',                   color: '#6b7280', bg: '#f3f4f6' },
+const STATUS_CONFIG = {
+  pending:          { color: '#d97706', bg: '#fef3c7' },
+  accepted:         { color: '#2563eb', bg: '#eff6ff' },
+  out_for_delivery: { color: '#7c3aed', bg: '#f5f3ff' },
+  delivered:        { color: '#16a34a', bg: '#dcfce7' },
+  canceled:         { color: '#dc2626', bg: '#fee2e2' },
+  returned:         { color: '#6b7280', bg: '#f3f4f6' },
 };
 
 export default function ClientOrderScreen({ navigation, route }) {
@@ -83,7 +84,7 @@ export default function ClientOrderScreen({ navigation, route }) {
     setPlacing(false);
 
     if (error || !data) {
-      Alert.alert('Error', 'Could not place your order. Please try again.');
+      Alert.alert(t('shared.error'), t('clientOrder.placeOrderError'));
       return;
     }
 
@@ -106,8 +107,8 @@ export default function ClientOrderScreen({ navigation, route }) {
     setCompleting(true);
     const { error } = await markDeliveryCompleteClient(job.id);
     if (error) {
-      Alert.alert('Error', 'Could not complete the order. Please try again.',
-        [{ text: 'Retry', onPress: () => handleAdComplete() }]
+      Alert.alert(t('shared.error'), t('clientOrder.completeOrderError'),
+        [{ text: t('shared.retry'), onPress: () => handleAdComplete() }]
       );
       setCompleting(false);
       return;
@@ -116,7 +117,7 @@ export default function ClientOrderScreen({ navigation, route }) {
     navigation.replace('ClientHome');
   }
 
-  const currentStatus = STATUS_LABELS[job?.status] || STATUS_LABELS.pending;
+  const currentStyle = STATUS_CONFIG[job?.status] || STATUS_CONFIG.pending;
 
   return (
     <View style={styles.container}>
@@ -124,10 +125,10 @@ export default function ClientOrderScreen({ navigation, route }) {
       {/* Ad modal */}
       <Modal visible={showAd} animationType="slide" transparent={false}>
         <View style={styles.adContainer}>
-          <Text style={styles.adTitle}>MotoDash Partner Ad</Text>
-          <Text style={styles.adSubtitle}>Video interstitial shown here</Text>
+          <Text style={styles.adTitle}>{t('shared.adTitle')}</Text>
+          <Text style={styles.adSubtitle}>{t('shared.adSubtitle')}</Text>
           <TouchableOpacity style={styles.adButton} onPress={handleAdComplete}>
-            <Text style={styles.adButtonText}>Continue</Text>
+            <Text style={styles.adButtonText}>{t('shared.continue')}</Text>
           </TouchableOpacity>
         </View>
       </Modal>
@@ -135,10 +136,10 @@ export default function ClientOrderScreen({ navigation, route }) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => !isPlaced && navigation.goBack()}>
-          <Text style={[styles.back, isPlaced && { opacity: 0 }]}>← Back</Text>
+          <Text style={[styles.back, isPlaced && { opacity: 0 }]}>{t('shared.back')}</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
-          {isPlaced ? 'Order status' : 'Review order'}
+          {isPlaced ? t('clientOrder.orderStatus') : t('clientOrder.reviewOrder')}
         </Text>
         <View style={{ width: 60 }} />
       </View>
@@ -147,15 +148,15 @@ export default function ClientOrderScreen({ navigation, route }) {
 
         {/* Store name */}
         <View style={styles.storeRow}>
-          <Text style={styles.storeLabel}>Store</Text>
+          <Text style={styles.storeLabel}>{t('clientOrder.store')}</Text>
           <Text style={styles.storeName}>{store?.store_name || job?.store_id}</Text>
         </View>
 
         {/* Status badge (post-order) */}
         {isPlaced && (
-          <View style={[styles.statusBadge, { backgroundColor: currentStatus.bg }]}>
-            <Text style={[styles.statusText, { color: currentStatus.color }]}>
-              {currentStatus.label}
+          <View style={[styles.statusBadge, { backgroundColor: currentStyle.bg }]}>
+            <Text style={[styles.statusText, { color: currentStyle.color }]}>
+              {t('clientOrder.status.' + (job?.status || 'pending'))}
             </Text>
           </View>
         )}
@@ -189,7 +190,7 @@ export default function ClientOrderScreen({ navigation, route }) {
         )}
 
         {/* Order items */}
-        <Text style={styles.sectionTitle}>Order items</Text>
+        <Text style={styles.sectionTitle}>{t('clientOrder.orderItems')}</Text>
         {(orderItems || job?.items || []).map((item, i) => (
           <View key={i} style={styles.itemRow}>
             <Text style={styles.itemName}>{item.name}</Text>
@@ -203,10 +204,10 @@ export default function ClientOrderScreen({ navigation, route }) {
         {/* Notes (pre-order) */}
         {!isPlaced && (
           <>
-            <Text style={styles.sectionTitle}>Delivery notes</Text>
+            <Text style={styles.sectionTitle}>{t('clientOrder.deliveryNotes')}</Text>
             <TextInput
               style={styles.notesInput}
-              placeholder="Add delivery instructions, gate codes, landmarks..."
+              placeholder={t('clientOrder.deliveryNotesPlaceholder')}
               placeholderTextColor="#9ca3af"
               multiline
               numberOfLines={3}
@@ -214,7 +215,7 @@ export default function ClientOrderScreen({ navigation, route }) {
               onChangeText={setNotes}
             />
             <Text style={styles.phoneNote}>
-              📞 The store will call {account?.phone} to confirm your order before starting.
+              {t('clientOrder.phoneNote', { phone: account?.phone })}
             </Text>
           </>
         )}
@@ -222,7 +223,7 @@ export default function ClientOrderScreen({ navigation, route }) {
         {/* Notes (post-order) */}
         {isPlaced && job?.order_notes ? (
           <View style={styles.notesBox}>
-            <Text style={styles.notesLabel}>Delivery notes</Text>
+            <Text style={styles.notesLabel}>{t('clientOrder.deliveryNotes')}</Text>
             <Text style={styles.notesText}>{job.order_notes}</Text>
           </View>
         ) : null}
@@ -230,7 +231,7 @@ export default function ClientOrderScreen({ navigation, route }) {
         {/* Order total (post-order) */}
         {isPlaced && job?.order_total && (
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Order total</Text>
+            <Text style={styles.totalLabel}>{t('clientOrder.orderTotal')}</Text>
             <Text style={styles.totalValue}>${Number(job.order_total).toFixed(2)}</Text>
           </View>
         )}
@@ -246,7 +247,7 @@ export default function ClientOrderScreen({ navigation, route }) {
           >
             {placing
               ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.primaryBtnText}>Place order</Text>
+              : <Text style={styles.primaryBtnText}>{t('clientOrder.placeOrder')}</Text>
             }
           </TouchableOpacity>
         )}
@@ -257,7 +258,7 @@ export default function ClientOrderScreen({ navigation, route }) {
             onPress={handleMarkReceived}
             disabled={completing}
           >
-            <Text style={styles.primaryBtnText}>Mark order received</Text>
+            <Text style={styles.primaryBtnText}>{t('clientOrder.markReceived')}</Text>
           </TouchableOpacity>
         )}
 
@@ -265,8 +266,8 @@ export default function ClientOrderScreen({ navigation, route }) {
           <View style={styles.waitingPanel}>
             <Text style={styles.waitingText}>
               {job?.status === 'pending'
-                ? 'Waiting for store to confirm your order...'
-                : 'Order confirmed — preparing your items'}
+                ? t('clientOrder.waitingConfirm')
+                : t('clientOrder.orderConfirmed')}
             </Text>
           </View>
         )}

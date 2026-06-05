@@ -2,56 +2,22 @@ import React, { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet
 } from 'react-native';
+import { t } from '../../i18n';
 
 const SECTIONS = [
-  {
-    key: 'client',
-    label: 'For clients',
-    content: [
-      'Download the app and create a Client account.',
-      'From the home screen, choose "Request a ride" or "Place an order".',
-      'For rides: tap the request button and wait for a driver to accept. You will see the driver on the map once accepted.',
-      'For orders: browse stores near you, add items to your order, and place it. The store will call you to confirm before starting.',
-      'Once your ride or delivery is complete, tap "Mark complete" to finish the job.',
-      'Never share personal information with drivers or stores outside the app.',
-      'If you feel unsafe, cancel the job and contact local authorities.',
-    ],
-  },
-  {
-    key: 'driver',
-    label: 'For drivers',
-    content: [
-      'Create a Driver account with your motorcycle details and cedula number.',
-      'From the home screen, tap "Mark ready" to start receiving job offers.',
-      'You will have 15 seconds to accept each offer. Refusing 3 jobs in a row will mark you as unavailable.',
-      'For rides: navigate to the client location. The "Mark complete" button appears when you are within 20 feet.',
-      'For deliveries: go to the store first, pick up the order, then deliver to the client. Return to the store with payment.',
-      'Always take a photo of deliveries as proof — store it on your device for your own protection.',
-      'Do not steal orders or refuse jobs without good reason. Abuse will result in account suspension.',
-    ],
-  },
-  {
-    key: 'store',
-    label: 'For stores',
-    content: [
-      'Create a Store account — your location will be set from your phone\'s GPS.',
-      'Add your inventory items with prices and stock counts. Keep inventory updated.',
-      'When a new order arrives you will receive a notification. Review and accept orders promptly.',
-      'Call the client to confirm the order before preparing it.',
-      'Once the order is ready, enter the total and mark it ready for delivery. Assign a driver from your preferred list or post to the general pool.',
-      'Mark the delivery as paid once the driver returns with payment to close the job.',
-      'Do not accept orders you cannot fulfill. Cancel promptly if needed.',
-    ],
-  },
+  { key: 'client', labelKey: 'instructions.forClients' },
+  { key: 'driver', labelKey: 'instructions.forDrivers' },
+  { key: 'store',  labelKey: 'instructions.forStores'  },
 ];
 
 export default function InstructionsScreen({ navigation }) {
   const [active, setActive] = useState('client');
-  const section = SECTIONS.find(s => s.key === active);
+
+  const content = t('instructions.' + active);
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>How it works</Text>
+      <Text style={styles.title}>{t('instructions.title')}</Text>
 
       <View style={styles.tabs}>
         {SECTIONS.map(s => (
@@ -61,14 +27,14 @@ export default function InstructionsScreen({ navigation }) {
             onPress={() => setActive(s.key)}
           >
             <Text style={[styles.tabText, active === s.key && styles.tabTextActive]}>
-              {s.label}
+              {t(s.labelKey)}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
       <ScrollView style={styles.content}>
-        {section.content.map((item, i) => (
+        {(Array.isArray(content) ? content : []).map((item, i) => (
           <View key={i} style={styles.item}>
             <Text style={styles.bullet}>{i + 1}</Text>
             <Text style={styles.itemText}>{item}</Text>
@@ -78,7 +44,7 @@ export default function InstructionsScreen({ navigation }) {
 
       {navigation && (
         <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>Back</Text>
+          <Text style={styles.backText}>{t('auth.back')}</Text>
         </TouchableOpacity>
       )}
     </View>

@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { supabase } from '../../config/supabase';
 import { requestLocationPermission, getCurrentLocation } from '../../services/locationService';
+import { t } from '../../i18n';
 
 export default function ClientStoresScreen({ navigation }) {
   const [stores, setStores]   = useState([]);
@@ -19,14 +20,14 @@ export default function ClientStoresScreen({ navigation }) {
     setLoading(true);
     const hasPermission = await requestLocationPermission();
     if (!hasPermission) {
-      Alert.alert('Location required', 'Please enable location to see stores near you.');
+      Alert.alert(t('shared.locationRequired'), t('clientStores.locationRequiredMsg'));
       setLoading(false);
       return;
     }
 
     const loc = await getCurrentLocation();
     if (!loc) {
-      Alert.alert('Location error', 'Could not get your location. Please try again.');
+      Alert.alert(t('shared.locationError'), t('shared.locationErrorMsg'));
       setLoading(false);
       return;
     }
@@ -51,7 +52,7 @@ export default function ClientStoresScreen({ navigation }) {
       .eq('accounts.status', 'active');
 
     if (error) {
-      Alert.alert('Error', 'Could not load stores. Please try again.');
+      Alert.alert(t('shared.error'), t('clientStores.loadError'));
       setLoading(false);
       return;
     }
@@ -99,19 +100,19 @@ export default function ClientStoresScreen({ navigation }) {
         style={[styles.storeCard, !open && styles.storeCardClosed]}
         onPress={() => open
           ? navigation.navigate('ClientInventory', { store: item, clientLocation: location })
-          : Alert.alert('Store closed', `${item.store_name} is currently closed.`)
+          : Alert.alert(t('clientStores.storeClosed'), t('clientStores.storeClosedMsg', { name: item.store_name }))
         }
       >
         <View style={styles.storeInfo}>
           <Text style={styles.storeName}>{item.store_name}</Text>
-          <Text style={styles.storeDistance}>{item.distance_km.toFixed(1)} km away</Text>
+          <Text style={styles.storeDistance}>{t('clientStores.kmAway', { distance: item.distance_km.toFixed(1) })}</Text>
           <Text style={styles.storeHours}>
             {item.open_hour} – {item.close_hour}
           </Text>
         </View>
         <View style={styles.storeRight}>
           <View style={[styles.statusBadge, open ? styles.statusOpen : styles.statusClosed]}>
-            <Text style={styles.statusBadgeText}>{open ? 'Open' : 'Closed'}</Text>
+            <Text style={styles.statusBadgeText}>{open ? t('clientStores.open') : t('clientStores.closed')}</Text>
           </View>
           <Text style={styles.arrow}>›</Text>
         </View>
@@ -123,30 +124,26 @@ export default function ClientStoresScreen({ navigation }) {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.back}>← Back</Text>
+          <Text style={styles.back}>{t('shared.back')}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Stores near you</Text>
+        <Text style={styles.headerTitle}>{t('clientStores.title')}</Text>
         <View style={{ width: 60 }} />
       </View>
 
       <View style={styles.notice}>
-        <Text style={styles.noticeText}>
-          ⚠️ You cannot mix items from different stores in a single order
-        </Text>
+        <Text style={styles.noticeText}>{t('clientStores.mixingWarning')}</Text>
       </View>
 
       {loading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#2563eb" />
-          <Text style={styles.loadingText}>Finding stores near you...</Text>
+          <Text style={styles.loadingText}>{t('clientStores.findingStores')}</Text>
         </View>
       ) : stores.length === 0 ? (
         <View style={styles.centered}>
           <Text style={styles.emptyIcon}>🏪</Text>
-          <Text style={styles.emptyText}>No stores within 3 km</Text>
-          <Text style={styles.emptySubtext}>
-            Check back later or try from a different location
-          </Text>
+          <Text style={styles.emptyText}>{t('clientStores.noStores')}</Text>
+          <Text style={styles.emptySubtext}>{t('clientStores.noStoresSubtext')}</Text>
         </View>
       ) : (
         <FlatList

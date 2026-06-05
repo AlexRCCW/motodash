@@ -109,6 +109,166 @@ export async function markDeliveryCompleteClient(jobId) {
   return { error };
 }
 
+// ── STORE DELIVERY ORDERS ────────────────────────────────────
+
+export async function getOpenDeliveryOrders(storeId) {
+  const { data, error } = await supabase
+    .from('delivery_jobs')
+    .select('id, status, order_total, items, created_at')
+    .eq('store_id', storeId)
+    .in('status', ['pending', 'accepted', 'out_for_delivery'])
+    .order('created_at', { ascending: false });
+  return { data, error };
+}
+
+export async function getClosedDeliveryOrders(storeId) {
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('delivery_jobs')
+    .select('id, status, order_total, items, created_at')
+    .eq('store_id', storeId)
+    .in('status', ['delivered', 'canceled', 'returned'])
+    .gte('created_at', cutoff)
+    .order('created_at', { ascending: false });
+  return { data, error };
+}
+
+export async function getDeliveryOrderDetail(jobId) {
+  const { data, error } = await supabase
+    .from('delivery_jobs')
+    .select('*')
+    .eq('id', jobId)
+    .single();
+  return { data, error };
+}
+
+export async function markOrderReady(jobId) {
+  const { error } = await supabase
+    .from('delivery_jobs')
+    .update({ status: 'accepted' })
+    .eq('id', jobId)
+    .eq('status', 'pending');
+  return { error };
+}
+
+export async function assignPreferredDriver(jobId, driverId) {
+  const { data: profile } = await supabase
+    .from('driver_profiles')
+    .select('last_known_lat, last_known_lng')
+    .eq('id', driverId)
+    .single();
+
+  const { data, error } = await supabase
+    .from('delivery_jobs')
+    .update({
+      driver_id: driverId,
+      driver_lat: profile?.last_known_lat ?? null,
+      driver_lng: profile?.last_known_lng ?? null,
+      status: 'out_for_delivery',
+    })
+    .eq('id', jobId)
+    .eq('status', 'accepted')
+    .select()
+    .single();
+  return { data, error };
+}
+
+export async function markDeliveryPaid(jobId) {
+  const { error } = await supabase
+    .from('delivery_jobs')
+    .update({ store_paid: true })
+    .eq('id', jobId);
+  return { error };
+}
+
+export async function getReadyPreferredDrivers(storeId) {
+  const { data: preferred, error: prefError } = await supabase
+    .from('preferred_drivers')
+    .select('driver_id')
+    .eq('store_id', storeId);
+
+  if (prefError || !preferred?.length) return { data: [], error: prefError };
+
+  const driverIds = preferred.map(p => p.driver_id);
+
+  const { data: profiles } = await supabase
+    .from('driver_profiles')
+    .select('id')
+    .in('id', driverIds)
+    .eq('ready_for_rides', true);
+
+  if (!profiles?.length) return { data: [] };
+
+  const readyIds = profiles.map(p => p.id);
+
+  const { data, error } = await supabase
+    .from('accounts')
+    .select('id, name')
+    .in('id', readyIds);
+
+  return { data: data ?? [], error };
+}
+
+// ── STORE ITEMS ───────────────────────────────────────────────
+
+export async function getStoreItems(storeId) {
+  const { data, error } = await supabase
+    .from('store_items')
+    .select('*')
+    .eq('store_id', storeId)
+    .order('name');
+  return { data, error };
+}
+
+export async function upsertStoreItem({ id, storeId, name, price, stockCount }) {
+  const count = Number(stockCount);
+  const fields = {
+    store_id:        storeId,
+    name:            String(name).trim(),
+    price:           Number(price),
+    inventory_count: count,
+    is_available:    count > 0,
+  };
+
+  if (id) {
+    // Editing an existing item
+    const { data, error } = await supabase
+      .from('store_items')
+      .update(fields)
+      .eq('id', id)
+      .eq('store_id', storeId)   // belt-and-suspenders ownership check
+      .select()
+      .single();
+    return { data, error };
+  }
+
+  // Creating a new item
+  const { data, error } = await supabase
+    .from('store_items')
+    .insert(fields)
+    .select()
+    .single();
+  return { data, error };
+}
+
+export async function deleteStoreItem(itemId) {
+  const { error } = await supabase
+    .from('store_items')
+    .delete()
+    .eq('id', itemId);
+  return { error };
+}
+
+export async function hasOutOfStockItems(storeId) {
+  const { data, error } = await supabase
+    .from('store_items')
+    .select('id')
+    .eq('store_id', storeId)
+    .eq('inventory_count', 0)
+    .limit(1);
+  return { hasOutOfStock: (data?.length ?? 0) > 0, error };
+}
+
 // ── DRIVER STATUS ────────────────────────────────────────────
 
 export async function setDriverReady(driverId, lat, lng) {

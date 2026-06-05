@@ -4,6 +4,7 @@ import {
   TouchableOpacity, ActivityIndicator, Alert
 } from 'react-native';
 import { supabase } from '../../config/supabase';
+import { t } from '../../i18n';
 
 export default function ClientInventoryScreen({ navigation, route }) {
   const { store, clientLocation } = route.params;
@@ -50,7 +51,7 @@ export default function ClientInventoryScreen({ navigation, route }) {
 
   function handleNext() {
     if (getOrderItemCount() === 0) {
-      Alert.alert('No items', 'Please add at least one item to your order.');
+      Alert.alert(t('clientInventory.noItemsAlert'), t('clientInventory.noItemsMsg'));
       return;
     }
     const orderItems = Object.entries(order).map(([id, qty]) => {
@@ -74,7 +75,7 @@ export default function ClientInventoryScreen({ navigation, route }) {
           <Text style={styles.itemName}>{item.name}</Text>
           <Text style={styles.itemPrice}>${Number(item.price).toFixed(2)}</Text>
           {outOfStock && (
-            <Text style={styles.outOfStock}>⚠️ May be out of stock</Text>
+            <Text style={styles.outOfStock}>{t('clientInventory.outOfStock')}</Text>
           )}
         </View>
         <View style={styles.qtyControls}>
@@ -101,7 +102,7 @@ export default function ClientInventoryScreen({ navigation, route }) {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.back}>← Back</Text>
+          <Text style={styles.back}>{t('shared.back')}</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{store.store_name}</Text>
         <View style={{ width: 60 }} />
@@ -113,7 +114,7 @@ export default function ClientInventoryScreen({ navigation, route }) {
         </View>
       ) : items.length === 0 ? (
         <View style={styles.centered}>
-          <Text style={styles.emptyText}>No items available</Text>
+          <Text style={styles.emptyText}>{t('clientInventory.noItems')}</Text>
         </View>
       ) : (
         <FlatList
@@ -128,7 +129,10 @@ export default function ClientInventoryScreen({ navigation, route }) {
       <View style={styles.footer}>
         {getOrderItemCount() > 0 && (
           <Text style={styles.orderSummary}>
-            {getOrderItemCount()} item{getOrderItemCount() !== 1 ? 's' : ''} · ${getOrderTotal().toFixed(2)} est.
+            {getOrderItemCount() !== 1
+              ? t('clientInventory.itemCountPlural', { count: getOrderItemCount() })
+              : t('clientInventory.itemCount', { count: getOrderItemCount() })
+            } · ${getOrderTotal().toFixed(2)} {t('clientInventory.estimated')}
           </Text>
         )}
         <TouchableOpacity
@@ -136,7 +140,7 @@ export default function ClientInventoryScreen({ navigation, route }) {
           onPress={handleNext}
           disabled={getOrderItemCount() === 0}
         >
-          <Text style={styles.nextBtnText}>Review order →</Text>
+          <Text style={styles.nextBtnText}>{t('clientInventory.reviewOrder')}</Text>
         </TouchableOpacity>
       </View>
     </View>

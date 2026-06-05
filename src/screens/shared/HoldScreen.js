@@ -1,26 +1,23 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { logout } from '../../services/authService';
+import { t } from '../../i18n';
 
 export default function HoldScreen({ reason }) {
   return (
     <View style={styles.container}>
       <Text style={styles.icon}>⏸️</Text>
-      <Text style={styles.title}>Account on hold</Text>
-      <Text style={styles.body}>
-        Your account has been temporarily placed on hold and all features are currently disabled.
-      </Text>
+      <Text style={styles.title}>{t('account.onHold')}</Text>
+      <Text style={styles.body}>{t('account.onHoldMsg')}</Text>
       {!!reason && (
         <View style={styles.reasonBox}>
-          <Text style={styles.reasonLabel}>Reason:</Text>
+          <Text style={styles.reasonLabel}>{t('account.onHoldReason')}</Text>
           <Text style={styles.reasonText}>{reason}</Text>
         </View>
       )}
-      <Text style={styles.body}>
-        To have your account unlocked, please contact support and reference your account email.
-      </Text>
+      <Text style={styles.body}>{t('account.onHoldInstructions')}</Text>
       <TouchableOpacity style={styles.button} onPress={logout}>
-        <Text style={styles.buttonText}>Sign out</Text>
+        <Text style={styles.buttonText}>{t('account.signOut')}</Text>
       </TouchableOpacity>
     </View>
   );

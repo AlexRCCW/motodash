@@ -5,22 +5,13 @@ import {
 } from 'react-native';
 import { supabase } from '../../config/supabase';
 import { useAuth } from '../../context/AuthContext';
+import { t } from '../../i18n';
 
-const AWARD_LABELS = {
-  rides_1:          { label: 'First ride',          icon: '🏍️', desc: 'Completed your first ride' },
-  rides_10:         { label: '10 rides',             icon: '🔟', desc: '10 rides completed' },
-  rides_100:        { label: '100 rides',            icon: '💯', desc: '100 rides completed' },
-  rides_1000:       { label: '1,000 rides',          icon: '🏆', desc: '1,000 rides completed' },
-  deliveries_1:     { label: 'First delivery',       icon: '📦', desc: 'Completed your first delivery' },
-  deliveries_10:    { label: '10 deliveries',        icon: '📫', desc: '10 deliveries completed' },
-  deliveries_100:   { label: '100 deliveries',       icon: '🚀', desc: '100 deliveries completed' },
-  deliveries_1000:  { label: '1,000 deliveries',     icon: '🌟', desc: '1,000 deliveries completed' },
-  distance_dr_ns:   { label: 'DR North–South',       icon: '🗺️', desc: 'Traveled 280 km — the length of the DR' },
-  distance_dr_ew:   { label: 'DR East–West',         icon: '🧭', desc: 'Traveled 390 km — the width of the DR' },
-  distance_dr_miami:{ label: 'DR to Miami',          icon: '✈️', desc: 'Traveled 1,700 km to Miami' },
-  distance_dr_nyc:  { label: 'DR to New York',       icon: '🗽', desc: 'Traveled 2,600 km to New York' },
-  distance_moon:    { label: 'To the Moon',          icon: '🌙', desc: 'Traveled 384,400 km to the Moon' },
-};
+const AWARD_KEYS = [
+  'rides_1', 'rides_10', 'rides_100', 'rides_1000',
+  'deliveries_1', 'deliveries_10', 'deliveries_100', 'deliveries_1000',
+  'distance_dr_ns', 'distance_dr_ew', 'distance_dr_miami', 'distance_dr_nyc', 'distance_moon',
+];
 
 export default function DriverStatsScreen({ navigation }) {
   const { account } = useAuth();
@@ -92,15 +83,15 @@ export default function DriverStatsScreen({ navigation }) {
     setRewardedLoading(false);
 
     if (error) {
-      Alert.alert('Error', 'Could not activate your boost. Please try again.');
+      Alert.alert(t('driverStats.error'), t('driverStats.boostError'));
       return;
     }
 
     await fetchStats();
     Alert.alert(
-      '2× boost active! 🚀',
-      'All distances you travel today count double toward your milestones.',
-      [{ text: 'Let\'s go!' }]
+      t('driverStats.boostActivated'),
+      t('driverStats.boostActivatedMsg'),
+      [{ text: t('driverStats.letsGo') }]
     );
   }
 
@@ -122,14 +113,14 @@ export default function DriverStatsScreen({ navigation }) {
       {/* Rewarded ad modal */}
       <Modal visible={showRewardedAd} animationType="slide" transparent={false}>
         <View style={styles.adContainer}>
-          <Text style={styles.adTitle}>Watch to activate 2× boost</Text>
-          <Text style={styles.adSubtitle}>Rewarded video ad shown here</Text>
+          <Text style={styles.adTitle}>{t('driverStats.watchAd')}</Text>
+          <Text style={styles.adSubtitle}>{t('shared.adRewarded')}</Text>
           <Text style={styles.adNote}>
             Replace with your rewarded ad SDK.{'\n'}
             Call handleRewardedAdComplete() when the ad finishes.
           </Text>
           <TouchableOpacity style={styles.adButton} onPress={handleRewardedAdComplete}>
-            <Text style={styles.adButtonText}>Ad complete — Activate boost</Text>
+            <Text style={styles.adButtonText}>{t('shared.adComplete')}</Text>
           </TouchableOpacity>
         </View>
       </Modal>
@@ -137,9 +128,9 @@ export default function DriverStatsScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.back}>← Back</Text>
+          <Text style={styles.back}>{t('shared.back')}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My stats</Text>
+        <Text style={styles.headerTitle}>{t('driverStats.title')}</Text>
         <View style={{ width: 60 }} />
       </View>
 
@@ -149,32 +140,30 @@ export default function DriverStatsScreen({ navigation }) {
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>
             <Text style={styles.statValue}>{stats?.total_rides ?? 0}</Text>
-            <Text style={styles.statLabel}>Rides</Text>
+            <Text style={styles.statLabel}>{t('driverStats.rides')}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statValue}>{stats?.total_deliveries ?? 0}</Text>
-            <Text style={styles.statLabel}>Deliveries</Text>
+            <Text style={styles.statLabel}>{t('driverStats.deliveries')}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statValue}>
               {stats?.distance_km ? Number(stats.distance_km).toFixed(0) : 0}
             </Text>
-            <Text style={styles.statLabel}>Km traveled</Text>
+            <Text style={styles.statLabel}>{t('driverStats.kmTraveled')}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statValue}>{stats?.days_worked ?? 0}</Text>
-            <Text style={styles.statLabel}>Days worked</Text>
+            <Text style={styles.statLabel}>{t('driverStats.daysWorked')}</Text>
           </View>
         </View>
 
         {/* 2× boost */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Weekly 2× distance boost</Text>
+          <Text style={styles.sectionTitle}>{t('driverStats.weeklyBoost')}</Text>
           {multiplierActive ? (
             <View style={styles.boostActive}>
-              <Text style={styles.boostActiveText}>
-                🚀 2× boost is active today! All distances count double.
-              </Text>
+              <Text style={styles.boostActiveText}>{t('driverStats.boostActive')}</Text>
             </View>
           ) : rewardedAvailable ? (
             <TouchableOpacity
@@ -182,15 +171,15 @@ export default function DriverStatsScreen({ navigation }) {
               onPress={() => setShowRewardedAd(true)}
               disabled={rewardedLoading}
             >
-              <Text style={styles.boostBtnText}>
-                Watch ad to activate 2× boost
-              </Text>
-              <Text style={styles.boostBtnSub}>Available once per week</Text>
+              <Text style={styles.boostBtnText}>{t('driverStats.watchAd')}</Text>
+              <Text style={styles.boostBtnSub}>{t('driverStats.oncePerWeek')}</Text>
             </TouchableOpacity>
           ) : (
             <View style={styles.boostUsed}>
               <Text style={styles.boostUsedText}>
-                ✓ Used this week — resets in {daysUntilReset()} day{daysUntilReset() !== 1 ? 's' : ''}
+                {daysUntilReset() !== 1
+                  ? t('driverStats.boostUsedPlural', { days: daysUntilReset() })
+                  : t('driverStats.boostUsed', { days: daysUntilReset() })}
               </Text>
             </View>
           )}
@@ -199,21 +188,21 @@ export default function DriverStatsScreen({ navigation }) {
         {/* Awards */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            Awards ({awards.length}/{Object.keys(AWARD_LABELS).length})
+            {t('driverStats.awards')} ({awards.length}/{AWARD_KEYS.length})
           </Text>
-          {Object.entries(AWARD_LABELS).map(([key, award]) => {
+          {AWARD_KEYS.map(key => {
             const earned = awards.find(a => a.award_key === key);
             return (
               <View key={key} style={[styles.awardRow, !earned && styles.awardRowLocked]}>
-                <Text style={styles.awardIcon}>{earned ? award.icon : '🔒'}</Text>
+                <Text style={styles.awardIcon}>{earned ? t('awards.' + key + '.icon') : '🔒'}</Text>
                 <View style={styles.awardInfo}>
                   <Text style={[styles.awardLabel, !earned && styles.awardLabelLocked]}>
-                    {award.label}
+                    {t('awards.' + key + '.label')}
                   </Text>
-                  <Text style={styles.awardDesc}>{award.desc}</Text>
+                  <Text style={styles.awardDesc}>{t('awards.' + key + '.desc')}</Text>
                   {earned && (
                     <Text style={styles.awardDate}>
-                      Earned {new Date(earned.awarded_at).toLocaleDateString()}
+                      {t('driverStats.earned', { date: new Date(earned.awarded_at).toLocaleDateString() })}
                     </Text>
                   )}
                 </View>
