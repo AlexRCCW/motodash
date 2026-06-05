@@ -12,6 +12,7 @@ import {
   assignPreferredDriver,
   markDeliveryPaid,
   getReadyPreferredDrivers,
+  dispatchJob,
 } from '../../services/jobService';
 import { t } from '../../i18n';
 
@@ -144,9 +145,9 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
   }
 
   function handlePostToPool() {
-    // Sets dispatching UI state. The Edge Function (built separately)
-    // will read jobs in 'accepted' status with no driver_id and dispatch FCM.
     setDispatching(true);
+    // Fire-and-forget: Edge Function finds nearby drivers and sends push notifications
+    dispatchJob(jobId, 'delivery').catch(e => console.error('dispatch-job error:', e));
   }
 
   function handleMarkPaid() {

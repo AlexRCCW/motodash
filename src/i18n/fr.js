@@ -321,6 +321,12 @@ export default {
     loadError: 'Impossible de charger les articles. Veuillez réessayer.',
     saveError: 'Impossible d\'enregistrer l\'article. Veuillez réessayer.',
     deleteError: 'Impossible de supprimer l\'article. Veuillez réessayer.',
+    photoOptions: 'Photo du produit',
+    takePhoto: 'Prendre une photo',
+    choosePhoto: 'Choisir dans la galerie',
+    addPhoto: 'Ajouter une photo',
+    changePhoto: 'Changer la photo',
+    uploadError: 'Article enregistré, mais l\'upload de la photo a échoué. Modifiez l\'article pour réessayer.',
   },
   shared: {
     back: '← Retour',

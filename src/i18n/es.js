@@ -321,6 +321,12 @@ export default {
     loadError: 'No se pudieron cargar los artículos. Inténtalo de nuevo.',
     saveError: 'No se pudo guardar el artículo. Inténtalo de nuevo.',
     deleteError: 'No se pudo eliminar el artículo. Inténtalo de nuevo.',
+    photoOptions: 'Foto del producto',
+    takePhoto: 'Tomar foto',
+    choosePhoto: 'Elegir de la galería',
+    addPhoto: 'Agregar foto',
+    changePhoto: 'Cambiar foto',
+    uploadError: 'Artículo guardado, pero la foto no se pudo subir. Edita el artículo para reintentar.',
   },
   shared: {
     back: '← Atrás',

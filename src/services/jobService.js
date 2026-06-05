@@ -220,35 +220,59 @@ export async function getStoreItems(storeId) {
   return { data, error };
 }
 
-export async function upsertStoreItem({ id, storeId, name, price, stockCount }) {
-  const count = Number(stockCount);
+export async function upsertStoreItem({ id, storeId, name, price, stockCount, imageUrl }) {
   const fields = {
     store_id:        storeId,
     name:            String(name).trim(),
     price:           Number(price),
-    inventory_count: count,
-    is_available:    count > 0,
+    inventory_count: Number(stockCount),
+    // is_available is managed by DB trigger — never set from client
   };
 
+  // Only include image_url when it was explicitly provided (undefined = leave as-is)
+  if (imageUrl !== undefined) fields.image_url = imageUrl;
+
   if (id) {
-    // Editing an existing item
     const { data, error } = await supabase
       .from('store_items')
       .update(fields)
       .eq('id', id)
-      .eq('store_id', storeId)   // belt-and-suspenders ownership check
+      .eq('store_id', storeId)
       .select()
       .single();
     return { data, error };
   }
 
-  // Creating a new item
   const { data, error } = await supabase
     .from('store_items')
     .insert(fields)
     .select()
     .single();
   return { data, error };
+}
+
+// base64 comes from ImageManipulator.manipulateAsync(..., { base64: true }).base64
+export async function uploadProductImage(storeId, itemId, base64) {
+  const path = `${storeId}/${itemId}.jpg`;
+
+  // Decode base64 → Uint8Array (no native modules needed — pure JS)
+  const binaryStr = atob(base64);
+  const bytes     = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+
+  const { error } = await supabase.storage
+    .from('store-products')
+    .upload(path, bytes, { contentType: 'image/jpeg', upsert: true });
+
+  if (error) return { url: null, error };
+
+  const { data } = supabase.storage
+    .from('store-products')
+    .getPublicUrl(path);
+
+  return { url: data.publicUrl, error: null };
 }
 
 export async function deleteStoreItem(itemId) {
@@ -313,4 +337,17 @@ export async function incrementDriverRefusals(driverId) {
     .eq('id', driverId);
 
   return { limitReached };
+}
+
+// ── EDGE FUNCTION DISPATCH ────────────────────────────────────
+
+/**
+ * Invoke the dispatch-job Edge Function non-blocking.
+ * Finds nearby available drivers and sends them an Expo push notification.
+ * Fire-and-forget: call without await so it never delays the UI.
+ */
+export function dispatchJob(jobId, jobType) {
+  return supabase.functions.invoke('dispatch-job', {
+    body: { job_id: jobId, job_type: jobType },
+  });
 }

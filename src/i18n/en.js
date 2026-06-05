@@ -352,6 +352,12 @@ export default {
     loadError: 'Could not load items. Please try again.',
     saveError: 'Could not save item. Please try again.',
     deleteError: 'Could not delete item. Please try again.',
+    photoOptions: 'Product photo',
+    takePhoto: 'Take photo',
+    choosePhoto: 'Choose from library',
+    addPhoto: 'Add photo',
+    changePhoto: 'Change photo',
+    uploadError: 'Item saved, but photo upload failed. Edit the item to retry.',
   },
 
   // ── SHARED ────────────────────────────────────────────────

@@ -7,7 +7,7 @@ import MapView, { Marker } from 'react-native-maps';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
 import { requestLocationPermission, getCurrentLocation } from '../../services/locationService';
-import { createRideJob, cancelRideJob, markRideCompleteClient, getRideJob } from '../../services/jobService';
+import { createRideJob, cancelRideJob, markRideCompleteClient, getRideJob, dispatchJob } from '../../services/jobService';
 import { supabase } from '../../config/supabase';
 import { t } from '../../i18n';
 
@@ -94,6 +94,8 @@ export default function ClientRideScreen({ navigation, route }) {
     await AsyncStorage.setItem('open_job_type', 'ride');
     await AsyncStorage.setItem('open_job_id', data.id);
     setStatus('waiting');
+    // Fire-and-forget: notify nearby drivers via Edge Function
+    dispatchJob(data.id, 'ride').catch(e => console.error('dispatch-job error:', e));
   }
 
   async function handleCancel() {

@@ -37,7 +37,14 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "MotoDash needs access to your photo library to upload product images.",
+          "cameraPermission": "MotoDash needs your camera to take product photos."
+        }
+      ]
     ]
   }
 }
