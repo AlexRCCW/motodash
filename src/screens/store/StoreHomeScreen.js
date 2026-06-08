@@ -12,17 +12,18 @@ import {
   getClosedDeliveryOrders,
   hasOutOfStockItems,
 } from '../../services/jobService';
+import { colors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 
 // ── Status display config ─────────────────────────────────────
 
 const STATUS_CONFIG = {
-  pending:          { color: '#d97706', bg: '#fef3c7' },
-  accepted:         { color: '#2563eb', bg: '#dbeafe' },
-  out_for_delivery: { color: '#7c3aed', bg: '#ede9fe' },
-  delivered:        { color: '#16a34a', bg: '#dcfce7' },
-  canceled:         { color: '#6b7280', bg: '#f3f4f6' },
-  returned:         { color: '#dc2626', bg: '#fee2e2' },
+  pending:          { color: colors.primary },
+  accepted:         { color: colors.textPrimary },
+  out_for_delivery: { color: colors.primary },
+  delivered:        { color: colors.textPrimary },
+  canceled:         { color: colors.textSecondary },
+  returned:         { color: colors.primary },
 };
 
 function formatOrderTime(iso) {
@@ -113,11 +114,9 @@ export default function StoreHomeScreen({ navigation }) {
         activeOpacity={0.75}
       >
         <View style={styles.cardRow}>
-          <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
-            <Text style={[styles.statusText, { color: cfg.color }]}>
-              {t('storeHome.status.' + order.status)}
-            </Text>
-          </View>
+          <Text style={[styles.statusText, { color: cfg.color }]}>
+            {t('storeHome.status.' + order.status).toUpperCase()}
+          </Text>
           <Text style={styles.orderTotal}>{total}</Text>
         </View>
         <View style={styles.cardRow}>
@@ -132,45 +131,62 @@ export default function StoreHomeScreen({ navigation }) {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <View style={styles.root}>
+        <SafeAreaView style={styles.hero} edges={['top']}>
+          <View style={styles.heroHeader}>
+            <Text style={styles.heroTitle}>MOTODASH</Text>
+          </View>
+        </SafeAreaView>
+        <SlashDivider />
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#16a34a" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   // ── Render ──────────────────────────────────────────────────
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.root}>
 
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>{t('storeHome.title')}</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity
-            style={styles.headerBtn}
-            onPress={() => navigation.navigate('StoreItems')}
-          >
-            <Text style={styles.headerBtnText}>{t('storeHome.items')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.headerBtn}
-            onPress={() => navigation.navigate('Instructions')}
-          >
-            <Text style={styles.headerBtnText}>{t('storeHome.help')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.headerBtn, styles.headerBtnDanger]}
-            onPress={handleSignOut}
-          >
-            <Text style={[styles.headerBtnText, styles.headerBtnTextDanger]}>
-              {t('auth.signOut')}
-            </Text>
-          </TouchableOpacity>
+      {/* ── Hero panel ── */}
+      <SafeAreaView style={styles.hero} edges={['top']}>
+        <View style={styles.heroHeader}>
+          <Text style={styles.heroTitle}>MOTODASH</Text>
+          <View style={styles.heroActions}>
+            <TouchableOpacity
+              style={styles.heroBtn}
+              onPress={() => navigation.navigate('StoreItems')}
+            >
+              <Text style={styles.heroBtnText}>{t('storeHome.items').toUpperCase()}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.heroBtn}
+              onPress={() => navigation.navigate('StoreDrivers')}
+            >
+              <Text style={styles.heroBtnText}>{t('storeHome.drivers').toUpperCase()}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.heroBtn}
+              onPress={() => navigation.navigate('Instructions')}
+            >
+              <Text style={styles.heroBtnText}>{t('storeHome.help').toUpperCase()}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.heroBtn, styles.heroBtnRed]}
+              onPress={handleSignOut}
+            >
+              <Text style={[styles.heroBtnText, styles.heroBtnRedText]}>
+                {t('auth.signOut').toUpperCase()}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </SafeAreaView>
+
+      {/* ── Red slash divider ── */}
+      <SlashDivider />
 
       {/* Out-of-stock banner — tappable, navigates to items */}
       {outOfStock && (
@@ -179,7 +195,7 @@ export default function StoreHomeScreen({ navigation }) {
           onPress={() => navigation.navigate('StoreItems')}
           activeOpacity={0.8}
         >
-          <Text style={styles.alertBannerText}>{t('storeHome.outOfStockAlert')}</Text>
+          <Text style={styles.alertBannerText}>{t('storeHome.outOfStockAlert').toUpperCase()}</Text>
         </TouchableOpacity>
       )}
 
@@ -190,15 +206,15 @@ export default function StoreHomeScreen({ navigation }) {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => { setRefreshing(true); loadData(); }}
-            tintColor="#16a34a"
+            tintColor={colors.primary}
           />
         }
       >
         {/* Open orders section */}
-        <Text style={styles.sectionTitle}>{t('storeHome.openOrders')}</Text>
+        <Text style={styles.sectionTitle}>{t('storeHome.openOrders').toUpperCase()}</Text>
         {openOrders.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>{t('storeHome.noOpenOrders')}</Text>
+            <Text style={styles.emptyText}>{t('storeHome.noOpenOrders').toUpperCase()}</Text>
           </View>
         ) : (
           openOrders.map(renderOrderCard)
@@ -206,84 +222,109 @@ export default function StoreHomeScreen({ navigation }) {
 
         {/* Closed orders section */}
         <Text style={[styles.sectionTitle, styles.sectionSpaced]}>
-          {t('storeHome.closedOrders')}
+          {t('storeHome.closedOrders').toUpperCase()}
         </Text>
         {closedOrders.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>{t('storeHome.noClosedOrders')}</Text>
+            <Text style={styles.emptyText}>{t('storeHome.noClosedOrders').toUpperCase()}</Text>
           </View>
         ) : (
           closedOrders.map(renderOrderCard)
         )}
       </ScrollView>
 
-    </SafeAreaView>
+    </View>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#fff' },
-  center:   { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  root:  { flex: 1, backgroundColor: colors.background },
+  center:{ flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  // Header
-  header: {
+  // ── Hero panel ──
+  hero: { backgroundColor: colors.hero, paddingBottom: 14 },
+  heroHeader: {
     flexDirection:     'row',
     alignItems:        'center',
     justifyContent:    'space-between',
     paddingHorizontal: 16,
-    paddingVertical:   12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    paddingTop:        10,
+    paddingBottom:     4,
   },
-  headerTitle:         { fontSize: 18, fontWeight: '700', color: '#1a1a1a' },
-  headerActions:       { flexDirection: 'row', gap: 8 },
-  headerBtn: {
-    paddingHorizontal: 10,
-    paddingVertical:   6,
-    borderRadius:      8,
-    backgroundColor:   '#f3f4f6',
+  heroTitle:   { fontSize: 18, fontWeight: '500', color: colors.onDark, letterSpacing: 2 },
+  heroActions: { flexDirection: 'row', gap: 6 },
+  heroBtn: {
+    paddingHorizontal: 9,
+    paddingVertical:   5,
+    borderRadius:      radius.sm,
+    backgroundColor:  'rgba(255,255,255,0.07)',
   },
-  headerBtnDanger:     { backgroundColor: '#fee2e2' },
-  headerBtnText:       { fontSize: 13, fontWeight: '600', color: '#374151' },
-  headerBtnTextDanger: { color: '#dc2626' },
+  heroBtnText:    { fontSize: 10, fontWeight: '500', color: colors.mutedOnDark, letterSpacing: 1.5 },
+  heroBtnRed:     { backgroundColor: 'rgba(192,57,43,0.18)' },
+  heroBtnRedText: { color: colors.primary },
 
   // Out-of-stock banner
   alertBanner: {
-    backgroundColor:   '#fef3c7',
+    backgroundColor:   colors.surface,
     paddingHorizontal: 16,
     paddingVertical:   10,
     borderBottomWidth: 1,
-    borderBottomColor: '#fde68a',
+    borderBottomColor: colors.border,
+    borderLeftWidth:   4,
+    borderLeftColor:   colors.primary,
   },
-  alertBannerText: { fontSize: 13, fontWeight: '500', color: '#92400e' },
+  alertBannerText: {
+    fontSize:      11,
+    fontWeight:    '500',
+    color:         colors.primary,
+    letterSpacing:  1.5,
+    textTransform: 'uppercase',
+  },
 
   // Scroll
   scroll:        { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 40 },
 
   // Sections
-  sectionTitle:  { fontSize: 16, fontWeight: '700', color: '#1a1a1a', marginBottom: 10 },
+  sectionTitle: {
+    fontSize:      11,
+    fontWeight:    '500',
+    color:         colors.textSecondary,
+    marginBottom:  10,
+    letterSpacing:  1.5,
+    textTransform: 'uppercase',
+  },
   sectionSpaced: { marginTop: 28 },
 
   // Empty state
   emptyCard: {
-    backgroundColor: '#f9fafb',
-    borderRadius:    12,
+    backgroundColor: colors.surface,
+    borderRadius:    radius.md,
+    borderWidth:     1,
+    borderColor:     colors.border,
     padding:         20,
     alignItems:      'center',
   },
-  emptyText: { fontSize: 14, color: '#9ca3af' },
+  emptyText: {
+    fontSize:      11,
+    color:         colors.textSecondary,
+    letterSpacing:  1.5,
+    textTransform: 'uppercase',
+    fontWeight:    '500',
+  },
 
   // Order card
   orderCard: {
-    backgroundColor: '#f9fafb',
-    borderRadius:    12,
+    backgroundColor: colors.surface,
+    borderRadius:    radius.md,
     padding:         14,
     marginBottom:    10,
     borderWidth:     1,
-    borderColor:     '#e5e7eb',
+    borderColor:     colors.border,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
   },
   cardRow: {
     flexDirection:  'row',
@@ -291,12 +332,12 @@ const styles = StyleSheet.create({
     alignItems:     'center',
     marginBottom:   6,
   },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical:    4,
-    borderRadius:      20,
+  statusText: {
+    fontSize:      11,
+    fontWeight:    '500',
+    letterSpacing:  1.5,
+    textTransform: 'uppercase',
   },
-  statusText: { fontSize: 12, fontWeight: '600' },
-  orderTotal: { fontSize: 15, fontWeight: '700', color: '#1a1a1a' },
-  orderMeta:  { fontSize: 12, color: '#6b7280' },
+  orderTotal: { fontSize: 15, fontWeight: '500', color: colors.textPrimary },
+  orderMeta:  { fontSize: 12, color: colors.textSecondary },
 });

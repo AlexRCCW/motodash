@@ -3,12 +3,14 @@ import {
   View, Text, StyleSheet, TouchableOpacity,
   Alert, ActivityIndicator, Modal
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
 import { requestLocationPermission, getCurrentLocation } from '../../services/locationService';
 import { createRideJob, cancelRideJob, markRideCompleteClient, getRideJob, dispatchJob } from '../../services/jobService';
 import { supabase } from '../../config/supabase';
+import { colors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 
 export default function ClientRideScreen({ navigation, route }) {
@@ -145,10 +147,10 @@ export default function ClientRideScreen({ navigation, route }) {
       {/* Ad modal */}
       <Modal visible={showAd} animationType="slide" transparent={false}>
         <View style={styles.adContainer}>
-          <Text style={styles.adTitle}>{t('shared.adTitle')}</Text>
+          <Text style={styles.adTitle}>{t('shared.adTitle').toUpperCase()}</Text>
           <Text style={styles.adSubtitle}>{t('shared.adSubtitle')}</Text>
           <TouchableOpacity style={styles.adButton} onPress={handleAdComplete}>
-            <Text style={styles.adButtonText}>{t('shared.continue')}</Text>
+            <Text style={styles.adButtonText}>{t('shared.continue').toUpperCase()}</Text>
           </TouchableOpacity>
         </View>
       </Modal>
@@ -167,62 +169,62 @@ export default function ClientRideScreen({ navigation, route }) {
           <Marker
             coordinate={{ latitude: location.lat, longitude: location.lng }}
             title="You"
-            pinColor="#2563eb"
+            pinColor={colors.primary}
           />
         )}
         {job?.driver_lat && job?.driver_lng && (
           <Marker
             coordinate={{ latitude: job.driver_lat, longitude: job.driver_lng }}
             title="Driver"
-            pinColor="#f59e0b"
+            pinColor={colors.textPrimary}
           />
         )}
       </MapView>
 
       {/* Bottom panel */}
-      <View style={styles.panel}>
+      <SafeAreaView style={styles.panel} edges={['bottom']}>
         {status === 'idle' && (
           <>
-            <Text style={styles.panelTitle}>{t('clientRide.readyForRide')}</Text>
+            <Text style={styles.panelTitle}>{t('clientRide.readyForRide').toUpperCase()}</Text>
             {!location ? (
-              <ActivityIndicator color="#2563eb" style={{ marginBottom: 16 }} />
+              <ActivityIndicator color={colors.primary} style={{ marginBottom: 16 }} />
             ) : null}
             <TouchableOpacity
               style={[styles.primaryBtn, !location && styles.primaryBtnDisabled]}
               onPress={handleRequestRide}
               disabled={!location}
             >
-              <Text style={styles.primaryBtnText}>{t('clientRide.requestRide')}</Text>
+              <Text style={styles.primaryBtnText}>{t('clientRide.requestRide').toUpperCase()}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.backBtn}
               onPress={() => navigation.goBack()}
             >
-              <Text style={styles.backBtnText}>{t('auth.back')}</Text>
+              <Text style={styles.backBtnText}>{t('auth.back').toUpperCase()}</Text>
             </TouchableOpacity>
           </>
         )}
 
         {status === 'requesting' && (
           <View style={styles.centeredPanel}>
-            <ActivityIndicator size="large" color="#2563eb" />
-            <Text style={styles.statusText}>{t('clientRide.creatingRequest')}</Text>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.statusText}>{t('clientRide.creatingRequest').toUpperCase()}</Text>
           </View>
         )}
 
         {status === 'waiting' && (
           <>
-            <Text style={styles.panelTitle}>{t('clientRide.lookingForDriver')}</Text>
+            <Text style={styles.panelTitle}>{t('clientRide.lookingForDriver').toUpperCase()}</Text>
             <Text style={styles.statusSubtext}>{t('clientRide.willBeNotified')}</Text>
             <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel}>
-              <Text style={styles.cancelBtnText}>{t('clientRide.cancelRequest')}</Text>
+              <Text style={styles.cancelBtnText}>{t('clientRide.cancelRequest').toUpperCase()}</Text>
             </TouchableOpacity>
           </>
         )}
 
         {status === 'accepted' && (
           <>
-            <Text style={styles.panelTitle}>{t('clientRide.driverOnWay')}</Text>
+            <Text style={styles.panelTitle}>{t('clientRide.driverOnWay').toUpperCase()}</Text>
             <Text style={styles.statusSubtext}>
               {t('clientRide.driverAway', { distance: job?.initial_distance_km?.toFixed(1) })}
             </Text>
@@ -231,33 +233,106 @@ export default function ClientRideScreen({ navigation, route }) {
               onPress={handleMarkComplete}
               disabled={completing}
             >
-              <Text style={styles.primaryBtnText}>{t('clientRide.markComplete')}</Text>
+              <Text style={styles.primaryBtnText}>{t('clientRide.markComplete').toUpperCase()}</Text>
             </TouchableOpacity>
           </>
         )}
-      </View>
+      </SafeAreaView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container:          { flex: 1, backgroundColor: '#fff' },
+  container:          { flex: 1, backgroundColor: colors.background },
   map:                { flex: 1 },
-  panel:              { backgroundColor: '#fff', padding: 24, paddingBottom: 40, borderTopWidth: 1, borderColor: '#eee' },
-  panelTitle:         { fontSize: 20, fontWeight: '700', color: '#1a1a1a', marginBottom: 8 },
-  statusSubtext:      { fontSize: 15, color: '#6b7280', marginBottom: 20 },
-  centeredPanel:      { alignItems: 'center', paddingVertical: 8 },
-  statusText:         { color: '#6b7280', fontSize: 15, marginTop: 12 },
-  primaryBtn:         { backgroundColor: '#2563eb', borderRadius: 12, padding: 18, alignItems: 'center', marginBottom: 12 },
+  panel: {
+    backgroundColor: colors.background,
+    padding:         24,
+    paddingBottom:   12,
+    borderTopWidth:  1,
+    borderColor:     colors.border,
+  },
+  panelTitle: {
+    fontSize:      13,
+    fontWeight:    '500',
+    color:         colors.textPrimary,
+    marginBottom:  12,
+    letterSpacing:  2,
+    textTransform: 'uppercase',
+  },
+  statusSubtext: { fontSize: 14, color: colors.textSecondary, marginBottom: 20 },
+  centeredPanel: { alignItems: 'center', paddingVertical: 8 },
+  statusText: {
+    color:         colors.textSecondary,
+    fontSize:      11,
+    marginTop:     12,
+    letterSpacing:  1.5,
+    textTransform: 'uppercase',
+  },
+  primaryBtn: {
+    backgroundColor: colors.primary,
+    borderRadius:    radius.md,
+    paddingVertical: 16,
+    alignItems:      'center',
+    marginBottom:    12,
+  },
   primaryBtnDisabled: { opacity: 0.5 },
-  primaryBtnText:     { color: '#fff', fontSize: 16, fontWeight: '700' },
-  cancelBtn:          { backgroundColor: '#fee2e2', borderRadius: 12, padding: 16, alignItems: 'center' },
-  cancelBtnText:      { color: '#dc2626', fontWeight: '600', fontSize: 15 },
-  backBtn:            { alignItems: 'center', padding: 12 },
-  backBtnText:        { color: '#6b7280', fontSize: 15 },
-  adContainer:        { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a1a1a', padding: 32 },
-  adTitle:            { fontSize: 24, fontWeight: '700', color: '#fff', marginBottom: 8 },
-  adSubtitle:         { fontSize: 16, color: '#9ca3af', marginBottom: 40 },
-  adButton:           { backgroundColor: '#2563eb', borderRadius: 12, padding: 16, alignItems: 'center', width: '100%' },
-  adButtonText:       { color: '#fff', fontWeight: '700', fontSize: 15 },
+  primaryBtnText: {
+    color:         colors.onDark,
+    fontSize:      13,
+    fontWeight:    '500',
+    letterSpacing:  2,
+  },
+  cancelBtn: {
+    backgroundColor: colors.surface,
+    borderRadius:    radius.md,
+    borderWidth:     1,
+    borderColor:     colors.primary,
+    paddingVertical: 16,
+    alignItems:      'center',
+  },
+  cancelBtnText: {
+    color:         colors.primary,
+    fontWeight:    '500',
+    fontSize:      13,
+    letterSpacing:  2,
+  },
+  backBtn:     { alignItems: 'center', padding: 12 },
+  backBtnText: { color: colors.textSecondary, fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase' },
+
+  // ── Ad modal ──
+  adContainer: {
+    flex:            1,
+    justifyContent:  'center',
+    alignItems:      'center',
+    backgroundColor: colors.hero,
+    padding:         32,
+  },
+  adTitle: {
+    fontSize:      18,
+    fontWeight:    '500',
+    color:         colors.onDark,
+    letterSpacing:  2,
+    marginBottom:   8,
+  },
+  adSubtitle: {
+    fontSize:     14,
+    color:        colors.mutedOnDark,
+    marginBottom: 40,
+    textAlign:    'center',
+  },
+  adButton: {
+    backgroundColor:   colors.primary,
+    borderRadius:       radius.md,
+    paddingVertical:   14,
+    paddingHorizontal: 40,
+    alignItems:        'center',
+    width:             '100%',
+  },
+  adButtonText: {
+    color:         colors.onDark,
+    fontSize:      13,
+    fontWeight:    '500',
+    letterSpacing:  2,
+  },
 });

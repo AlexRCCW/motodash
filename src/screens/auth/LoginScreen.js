@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import {
-  Text, TextInput, TouchableOpacity,
+  View, Text, TextInput, TouchableOpacity,
   StyleSheet, ActivityIndicator, Alert, ScrollView, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { login } from '../../services/authService';
+import { colors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 
 export default function LoginScreen({ navigation }) {
@@ -26,7 +27,17 @@ export default function LoginScreen({ navigation }) {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.root}>
+      {/* ── Hero panel ── */}
+      <SafeAreaView style={styles.hero} edges={['top']}>
+        <View style={styles.heroInner}>
+          <Text style={styles.heroTitle}>MOTODASH</Text>
+        </View>
+      </SafeAreaView>
+
+      {/* ── Red slash divider ── */}
+      <SlashDivider />
+
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
@@ -42,7 +53,7 @@ export default function LoginScreen({ navigation }) {
         <TextInput
           style={styles.input}
           placeholder={t('auth.email')}
-          placeholderTextColor="#999"
+          placeholderTextColor={colors.textSecondary}
           autoCapitalize="none"
           keyboardType="email-address"
           value={email}
@@ -51,7 +62,7 @@ export default function LoginScreen({ navigation }) {
         <TextInput
           style={styles.input}
           placeholder={t('auth.password')}
-          placeholderTextColor="#999"
+          placeholderTextColor={colors.textSecondary}
           secureTextEntry
           value={password}
           onChangeText={setPassword}
@@ -63,37 +74,73 @@ export default function LoginScreen({ navigation }) {
           disabled={loading}
         >
           {loading
-            ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.buttonText}>{t('auth.signIn')}</Text>
+            ? <ActivityIndicator color={colors.onDark} />
+            : <Text style={styles.buttonText}>{t('auth.signIn').toUpperCase()}</Text>
           }
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.link} onPress={() => navigation.navigate('Register')}>
-          <Text style={styles.linkText}>{t('auth.noAccount')}</Text>
+          <Text style={styles.linkText}>{t('auth.noAccount').toUpperCase()}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.link} onPress={() => navigation.navigate('Instructions')}>
-          <Text style={styles.linkText}>{t('auth.howItWorks')}</Text>
+          <Text style={styles.linkText}>{t('auth.howItWorks').toUpperCase()}</Text>
         </TouchableOpacity>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea:      { flex: 1, backgroundColor: '#fff' },
-  container:     { flexGrow: 1, justifyContent: 'center', padding: 24 },
+  root: { flex: 1, backgroundColor: colors.background },
+
+  // ── Hero panel ──
+  hero: { backgroundColor: colors.hero },
+  heroInner: {
+    paddingHorizontal: 24,
+    paddingTop:        10,
+    paddingBottom:     14,
+    alignItems:        'center',
+  },
+  heroTitle: { fontSize: 18, fontWeight: '500', color: colors.onDark, letterSpacing: 2 },
+
+  container: { flexGrow: 1, justifyContent: 'center', padding: 24 },
   logo: {
     alignSelf:    'center',
     width:        '72%',
     aspectRatio:  2500 / 1920,
     marginBottom: 8,
   },
-  subtitle:      { fontSize: 16, textAlign: 'center', color: '#666', marginBottom: 32 },
-  input:         { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 14, fontSize: 16, marginBottom: 16, color: '#1a1a1a', backgroundColor: '#fafafa' },
-  button:        { backgroundColor: '#2563eb', borderRadius: 10, padding: 16, alignItems: 'center', marginTop: 8 },
-  buttonDisabled:{ opacity: 0.6 },
-  buttonText:    { color: '#fff', fontSize: 16, fontWeight: '600' },
-  link:          { marginTop: 20, alignItems: 'center' },
-  linkText:      { color: '#2563eb', fontSize: 15 },
+  subtitle: { fontSize: 15, textAlign: 'center', color: colors.textSecondary, marginBottom: 32 },
+  input: {
+    borderWidth:       1,
+    borderColor:       colors.border,
+    borderRadius:      radius.md,
+    padding:           14,
+    fontSize:          16,
+    marginBottom:      16,
+    color:             colors.textPrimary,
+    backgroundColor:   colors.surface,
+  },
+  button: {
+    backgroundColor: colors.primary,
+    borderRadius:    radius.md,
+    paddingVertical: 16,
+    alignItems:      'center',
+    marginTop:       8,
+  },
+  buttonDisabled: { opacity: 0.6 },
+  buttonText: {
+    color:         colors.onDark,
+    fontSize:      13,
+    fontWeight:    '500',
+    letterSpacing:  2,
+  },
+  link:     { marginTop: 20, alignItems: 'center' },
+  linkText: {
+    color:         colors.textSecondary,
+    fontSize:      11,
+    letterSpacing:  1.5,
+    fontWeight:    '500',
+  },
 });

@@ -3,8 +3,10 @@ import {
   View, Text, StyleSheet, ScrollView,
   TouchableOpacity, Alert, Modal, ActivityIndicator
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../config/supabase';
 import { useAuth } from '../../context/AuthContext';
+import { colors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 
 const AWARD_KEYS = [
@@ -98,7 +100,7 @@ export default function DriverStatsScreen({ navigation }) {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -108,62 +110,67 @@ export default function DriverStatsScreen({ navigation }) {
     && stats?.distance_multiplier > 1;
 
   return (
-    <View style={styles.container}>
+    <View style={styles.root}>
 
       {/* Rewarded ad modal */}
       <Modal visible={showRewardedAd} animationType="slide" transparent={false}>
         <View style={styles.adContainer}>
-          <Text style={styles.adTitle}>{t('driverStats.watchAd')}</Text>
+          <Text style={styles.adTitle}>{t('driverStats.watchAd').toUpperCase()}</Text>
           <Text style={styles.adSubtitle}>{t('shared.adRewarded')}</Text>
           <Text style={styles.adNote}>
             Replace with your rewarded ad SDK.{'\n'}
             Call handleRewardedAdComplete() when the ad finishes.
           </Text>
           <TouchableOpacity style={styles.adButton} onPress={handleRewardedAdComplete}>
-            <Text style={styles.adButtonText}>{t('shared.adComplete')}</Text>
+            <Text style={styles.adButtonText}>{t('shared.adComplete').toUpperCase()}</Text>
           </TouchableOpacity>
         </View>
       </Modal>
 
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.back}>{t('shared.back')}</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('driverStats.title')}</Text>
-        <View style={{ width: 60 }} />
-      </View>
+      {/* ── Hero panel ── */}
+      <SafeAreaView style={styles.hero} edges={['top']}>
+        <View style={styles.heroHeader}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.heroBackBtn}>
+            <Text style={styles.heroBackText}>{t('shared.back').toUpperCase()}</Text>
+          </TouchableOpacity>
+          <Text style={styles.heroTitle}>{t('driverStats.title').toUpperCase()}</Text>
+          <View style={{ width: 60 }} />
+        </View>
+      </SafeAreaView>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      {/* ── Red slash divider ── */}
+      <SlashDivider />
+
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
 
         {/* Stats grid */}
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>
             <Text style={styles.statValue}>{stats?.total_rides ?? 0}</Text>
-            <Text style={styles.statLabel}>{t('driverStats.rides')}</Text>
+            <Text style={styles.statLabel}>{t('driverStats.rides').toUpperCase()}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statValue}>{stats?.total_deliveries ?? 0}</Text>
-            <Text style={styles.statLabel}>{t('driverStats.deliveries')}</Text>
+            <Text style={styles.statLabel}>{t('driverStats.deliveries').toUpperCase()}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statValue}>
               {stats?.distance_km ? Number(stats.distance_km).toFixed(0) : 0}
             </Text>
-            <Text style={styles.statLabel}>{t('driverStats.kmTraveled')}</Text>
+            <Text style={styles.statLabel}>{t('driverStats.kmTraveled').toUpperCase()}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statValue}>{stats?.days_worked ?? 0}</Text>
-            <Text style={styles.statLabel}>{t('driverStats.daysWorked')}</Text>
+            <Text style={styles.statLabel}>{t('driverStats.daysWorked').toUpperCase()}</Text>
           </View>
         </View>
 
         {/* 2× boost */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('driverStats.weeklyBoost')}</Text>
+          <Text style={styles.sectionTitle}>{t('driverStats.weeklyBoost').toUpperCase()}</Text>
           {multiplierActive ? (
             <View style={styles.boostActive}>
-              <Text style={styles.boostActiveText}>{t('driverStats.boostActive')}</Text>
+              <Text style={styles.boostActiveText}>{t('driverStats.boostActive').toUpperCase()}</Text>
             </View>
           ) : rewardedAvailable ? (
             <TouchableOpacity
@@ -171,7 +178,7 @@ export default function DriverStatsScreen({ navigation }) {
               onPress={() => setShowRewardedAd(true)}
               disabled={rewardedLoading}
             >
-              <Text style={styles.boostBtnText}>{t('driverStats.watchAd')}</Text>
+              <Text style={styles.boostBtnText}>{t('driverStats.watchAd').toUpperCase()}</Text>
               <Text style={styles.boostBtnSub}>{t('driverStats.oncePerWeek')}</Text>
             </TouchableOpacity>
           ) : (
@@ -188,7 +195,7 @@ export default function DriverStatsScreen({ navigation }) {
         {/* Awards */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            {t('driverStats.awards')} ({awards.length}/{AWARD_KEYS.length})
+            {t('driverStats.awards').toUpperCase()} ({awards.length}/{AWARD_KEYS.length})
           </Text>
           {AWARD_KEYS.map(key => {
             const earned = awards.find(a => a.award_key === key);
@@ -216,37 +223,159 @@ export default function DriverStatsScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container:        { flex: 1, backgroundColor: '#fff' },
-  centered:         { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header:           { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 16, borderBottomWidth: 1, borderColor: '#eee' },
-  back:             { color: '#2563eb', fontSize: 16, width: 60 },
-  headerTitle:      { fontSize: 18, fontWeight: '700', color: '#1a1a1a' },
-  content:          { padding: 16, paddingBottom: 40 },
-  statsGrid:        { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
-  statCard:         { flex: 1, minWidth: '45%', backgroundColor: '#f8fafc', borderRadius: 12, padding: 16, alignItems: 'center' },
-  statValue:        { fontSize: 28, fontWeight: '700', color: '#2563eb' },
-  statLabel:        { fontSize: 13, color: '#6b7280', marginTop: 4 },
-  section:          { marginBottom: 24 },
-  sectionTitle:     { fontSize: 16, fontWeight: '700', color: '#1a1a1a', marginBottom: 12 },
-  boostActive:      { backgroundColor: '#dcfce7', borderRadius: 12, padding: 16 },
-  boostActiveText:  { color: '#166534', fontWeight: '600', fontSize: 15 },
-  boostBtn:         { backgroundColor: '#2563eb', borderRadius: 12, padding: 16, alignItems: 'center' },
-  boostBtnText:     { color: '#fff', fontWeight: '700', fontSize: 15 },
-  boostBtnSub:      { color: '#bfdbfe', fontSize: 12, marginTop: 4 },
-  boostUsed:        { backgroundColor: '#f3f4f6', borderRadius: 12, padding: 16 },
-  boostUsedText:    { color: '#6b7280', fontSize: 14 },
-  awardRow:         { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderColor: '#f3f4f6' },
-  awardRowLocked:   { opacity: 0.5 },
+  root:    { flex: 1, backgroundColor: colors.background },
+  centered:{ flex: 1, justifyContent: 'center', alignItems: 'center' },
+
+  // ── Hero panel ──
+  hero: { backgroundColor: colors.hero, paddingBottom: 14 },
+  heroHeader: {
+    flexDirection:  'row',
+    justifyContent: 'space-between',
+    alignItems:     'center',
+    paddingHorizontal: 16,
+    paddingTop:     10,
+    paddingBottom:  4,
+  },
+  heroTitle:    { fontSize: 16, fontWeight: '500', color: colors.onDark, letterSpacing: 2 },
+  heroBackBtn:  { width: 60 },
+  heroBackText: { fontSize: 11, fontWeight: '500', color: colors.mutedOnDark, letterSpacing: 1.5 },
+
+  scroll:   { flex: 1 },
+  content:  { padding: 16, paddingBottom: 40 },
+
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
+  statCard: {
+    flex:            1,
+    minWidth:        '45%',
+    backgroundColor: colors.surface,
+    borderRadius:    radius.md,
+    borderWidth:     1,
+    borderColor:     colors.border,
+    padding:         16,
+    alignItems:      'center',
+  },
+  statValue: {
+    fontSize:   28,
+    fontWeight: '500',
+    color:      colors.primary,
+    letterSpacing: 1,
+  },
+  statLabel: {
+    fontSize:      11,
+    color:         colors.textSecondary,
+    marginTop:     6,
+    letterSpacing:  1.5,
+    fontWeight:    '500',
+    textTransform: 'uppercase',
+  },
+
+  section:      { marginBottom: 24 },
+  sectionTitle: {
+    fontSize:      12,
+    fontWeight:    '500',
+    color:         colors.textPrimary,
+    marginBottom:  12,
+    letterSpacing:  1.5,
+    textTransform: 'uppercase',
+  },
+
+  boostActive: {
+    backgroundColor: colors.surface,
+    borderRadius:    radius.md,
+    borderWidth:     1,
+    borderColor:     colors.border,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
+    padding:         16,
+  },
+  boostActiveText: {
+    color:         colors.primary,
+    fontWeight:    '500',
+    fontSize:      13,
+    letterSpacing:  1.5,
+  },
+  boostBtn: {
+    backgroundColor: colors.primary,
+    borderRadius:    radius.md,
+    padding:         16,
+    alignItems:      'center',
+  },
+  boostBtnText: {
+    color:         colors.onDark,
+    fontWeight:    '500',
+    fontSize:      13,
+    letterSpacing:  2,
+  },
+  boostBtnSub: {
+    color:      'rgba(255,255,255,0.6)',
+    fontSize:   12,
+    marginTop:  4,
+  },
+  boostUsed: {
+    backgroundColor: colors.surface,
+    borderRadius:    radius.md,
+    borderWidth:     1,
+    borderColor:     colors.border,
+    padding:         16,
+  },
+  boostUsedText: { color: colors.textSecondary, fontSize: 14 },
+
+  awardRow: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderColor:     colors.border,
+  },
+  awardRowLocked:   { opacity: 0.4 },
   awardIcon:        { fontSize: 28, width: 44 },
   awardInfo:        { flex: 1 },
-  awardLabel:       { fontSize: 15, fontWeight: '600', color: '#1a1a1a' },
-  awardLabelLocked: { color: '#9ca3af' },
-  awardDesc:        { fontSize: 13, color: '#6b7280', marginTop: 2 },
-  awardDate:        { fontSize: 12, color: '#2563eb', marginTop: 2 },
-  adContainer:      { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a1a1a', padding: 32 },
-  adTitle:          { fontSize: 22, fontWeight: '700', color: '#fff', marginBottom: 8, textAlign: 'center' },
-  adSubtitle:       { fontSize: 16, color: '#9ca3af', marginBottom: 24 },
-  adNote:           { fontSize: 13, color: '#6b7280', textAlign: 'center', marginBottom: 32, lineHeight: 20 },
-  adButton:         { backgroundColor: '#2563eb', borderRadius: 12, padding: 16, alignItems: 'center', width: '100%' },
-  adButtonText:     { color: '#fff', fontWeight: '700', fontSize: 15 },
+  awardLabel:       { fontSize: 15, fontWeight: '500', color: colors.textPrimary },
+  awardLabelLocked: { color: colors.textSecondary },
+  awardDesc:        { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
+  awardDate:        { fontSize: 12, color: colors.primary, marginTop: 2 },
+
+  // ── Ad modal ──
+  adContainer: {
+    flex:            1,
+    justifyContent:  'center',
+    alignItems:      'center',
+    backgroundColor: colors.hero,
+    padding:         32,
+  },
+  adTitle: {
+    fontSize:      18,
+    fontWeight:    '500',
+    color:         colors.onDark,
+    letterSpacing:  2,
+    marginBottom:   8,
+    textAlign:     'center',
+  },
+  adSubtitle: {
+    fontSize:     14,
+    color:        colors.mutedOnDark,
+    marginBottom: 16,
+    textAlign:    'center',
+  },
+  adNote: {
+    fontSize:     13,
+    color:        colors.mutedOnDark,
+    textAlign:    'center',
+    marginBottom: 32,
+    lineHeight:   20,
+  },
+  adButton: {
+    backgroundColor:   colors.primary,
+    borderRadius:       radius.md,
+    paddingVertical:   14,
+    paddingHorizontal: 40,
+    alignItems:        'center',
+    width:             '100%',
+  },
+  adButtonText: {
+    color:         colors.onDark,
+    fontSize:      13,
+    fontWeight:    '500',
+    letterSpacing:  2,
+  },
 });

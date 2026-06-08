@@ -90,7 +90,7 @@ export async function register(base, profile) {
   const profileError = await insertProfile(userId, base.accountType, profile);
   if (profileError) return { error: profileError };
 
-  return { error: null };
+  return { userId, error: null };
 }
 
 async function insertProfile(userId, accountType, profile) {
@@ -114,13 +114,14 @@ async function insertProfile(userId, accountType, profile) {
 
   } else if (accountType === 'store') {
     const { error } = await supabase.from('store_profiles').insert({
-      id: userId,
-      store_name: profile.storeName,
+      id:           userId,
+      store_name:   profile.storeName,
+      store_type:   profile.storeType,
       location_lat: profile.locationLat,
       location_lng: profile.locationLng,
-      open_hour: profile.openHour,
-      close_hour: profile.closeHour,
-      days_open: profile.daysOpen,
+      open_hour:    profile.openHour,
+      close_hour:   profile.closeHour,
+      days_open:    profile.daysOpen,
     });
     if (error) return error.message;
   }

@@ -1,60 +1,103 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, Modal, Animated
+  Alert, ActivityIndicator, Modal, Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
-import { useAuth } from '../../context/AuthContext';
-import { logout } from '../../services/authService';
+import { useAuth }        from '../../context/AuthContext';
+import { logout }         from '../../services/authService';
+import { supabase }       from '../../config/supabase';
 import { requestLocationPermission, getCurrentLocation } from '../../services/locationService';
-import { setDriverReady, setDriverNotReady, incrementDriverRefusals, acceptRideJob, acceptDeliveryJob } from '../../services/jobService';
+import {
+  setDriverReady, setDriverNotReady, incrementDriverRefusals,
+  acceptRideJob, acceptDeliveryJob,
+} from '../../services/jobService';
 import { registerForPushNotifications, setupNotificationListeners } from '../../services/notificationService';
+import { colors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 
-const OFFER_TIMEOUT_SECONDS = 15;
+const OFFER_TIMEOUT = 15;
 
 export default function DriverHomeScreen({ navigation }) {
-  const { account } = useAuth();
-  const [status, setStatus]         = useState('idle'); // idle | loading | waiting | on_job
-  const [location, setLocation]     = useState(null);
-  const [jobOffer, setJobOffer]     = useState(null);  // incoming offer data
+  const { account }                 = useAuth();
+  const [status,     setStatus]     = useState('idle');  // idle | loading | waiting
+  const [location,   setLocation]   = useState(null);
+  const [jobOffer,   setJobOffer]   = useState(null);
   const [offerTimer, setOfferTimer] = useState(0);
-  const [showAd, setShowAd]         = useState(false);
+  const [showAd,     setShowAd]     = useState(false);
 
-  const timerRef    = useRef(null);
-  const cleanupRef  = useRef(null);
+  const timerRef = useRef(null);
 
   useEffect(() => {
-    // Register for push notifications on mount
     if (account?.id) {
       registerForPushNotifications(account.id);
+      checkActiveJob();
     }
-
-    // Set up notification listeners
-    const cleanup = setupNotificationListeners({
-      onJobOffer: handleJobOffer,
-    });
-    cleanupRef.current = cleanup;
-
+    const cleanup = setupNotificationListeners({ onJobOffer: handleJobOffer });
     return () => {
       cleanup();
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [account?.id]);
 
-  function handleJobOffer(data) {
-    // Only show offer if we're in waiting state
-    setJobOffer(data);
-    setOfferTimer(OFFER_TIMEOUT_SECONDS);
+  // ── Resume active job on app open ────────────────────────────
+  // Handles: push not received, app closed mid-job, simulator testing
 
-    // Start countdown
+  async function checkActiveJob() {
+    // 1. Active ride → go straight to ride screen
+    const { data: ride } = await supabase
+      .from('ride_jobs')
+      .select('*')
+      .eq('driver_id', account.id)
+      .in('status', ['accepted', 'in_progress'])
+      .maybeSingle();
+
+    if (ride) {
+      await requestLocationPermission();
+      navigation.navigate('DriverRide', { job: ride });
+      return;
+    }
+
+    // 2. Active delivery → go straight to delivery screen
+    const { data: delivery } = await supabase
+      .from('delivery_jobs')
+      .select('*')
+      .eq('driver_id', account.id)
+      .eq('status', 'out_for_delivery')
+      .maybeSingle();
+
+    if (delivery) {
+      await requestLocationPermission();
+      navigation.navigate('DriverDelivery', { job: delivery });
+      return;
+    }
+
+    // 3. No active job — check if driver is already marked ready in DB.
+    // This happens when returning from a completed job: ready_for_rides stays
+    // true so the driver re-enters the waiting pool without watching a second ad.
+    const { data: profile } = await supabase
+      .from('driver_profiles')
+      .select('ready_for_rides, last_known_lat, last_known_lng')
+      .eq('id', account.id)
+      .single();
+
+    if (profile?.ready_for_rides) {
+      if (profile.last_known_lat && profile.last_known_lng) {
+        setLocation({ lat: profile.last_known_lat, lng: profile.last_known_lng });
+      }
+      setStatus('waiting');
+    }
+  }
+
+  // ── Job offer ────────────────────────────────────────────────
+
+  function handleJobOffer(data) {
+    setJobOffer(data);
+    setOfferTimer(OFFER_TIMEOUT);
     timerRef.current = setInterval(() => {
       setOfferTimer(prev => {
-        if (prev <= 1) {
-          clearInterval(timerRef.current);
-          handleRefuse(data); // auto-refuse on timeout
-          return 0;
-        }
+        if (prev <= 1) { clearInterval(timerRef.current); handleRefuse(data); return 0; }
         return prev - 1;
       });
     }, 1000);
@@ -74,71 +117,42 @@ export default function DriverHomeScreen({ navigation }) {
     if (!jobOffer) return;
     clearInterval(timerRef.current);
     setJobOffer(null);
-
-    // Get current location for job snapshot
     const loc = await getCurrentLocation();
-
+    const args = { jobId: jobOffer.job_id, driverId: account.id, driverLat: loc?.lat, driverLng: loc?.lng };
     if (jobOffer.type === 'ride_offer') {
-      const { data, error } = await acceptRideJob({
-        jobId: jobOffer.job_id,
-        driverId: account.id,
-        driverLat: loc?.lat,
-        driverLng: loc?.lng,
-      });
-      if (!error && data) {
-        navigation.navigate('DriverRide', { job: data });
-      } else {
-        Alert.alert(t('driverHome.jobUnavailable'), t('driverHome.jobTaken'));
-      }
-    } else if (jobOffer.type === 'delivery_offer') {
-      const { data, error } = await acceptDeliveryJob({
-        jobId: jobOffer.job_id,
-        driverId: account.id,
-        driverLat: loc?.lat,
-        driverLng: loc?.lng,
-      });
-      if (!error && data) {
-        navigation.navigate('DriverDelivery', { job: data });
-      } else {
-        Alert.alert(t('driverHome.jobUnavailable'), t('driverHome.jobTaken'));
-      }
+      const { data, error } = await acceptRideJob(args);
+      if (!error && data) navigation.navigate('DriverRide', { job: data });
+      else Alert.alert(t('driverHome.jobUnavailable'), t('driverHome.jobTaken'));
+    } else {
+      const { data, error } = await acceptDeliveryJob(args);
+      if (!error && data) navigation.navigate('DriverDelivery', { job: data });
+      else Alert.alert(t('driverHome.jobUnavailable'), t('driverHome.jobTaken'));
     }
   }
 
+  // ── Status actions ───────────────────────────────────────────
+
   async function handleMarkReady() {
     setStatus('loading');
-
-    const hasPermission = await requestLocationPermission();
-    if (!hasPermission) {
+    if (!(await requestLocationPermission())) {
       Alert.alert(t('shared.locationRequired'), t('driverHome.locationRequiredMsg'));
       setStatus('idle');
       return;
     }
-
     const loc = await getCurrentLocation();
     if (!loc) {
       Alert.alert(t('shared.locationError'), t('shared.locationErrorMsg'));
       setStatus('idle');
       return;
     }
-
     setLocation(loc);
-
-    // Show playable ad before going active
-    setShowAd(true);
+    setShowAd(true);   // playable ad before going active
   }
 
   async function handleAdComplete() {
     setShowAd(false);
-    const loc = location;
-
-    const { error } = await setDriverReady(account.id, loc.lat, loc.lng);
-    if (error) {
-      Alert.alert(t('shared.error'), t('driverHome.statusUpdateError'));
-      setStatus('idle');
-      return;
-    }
-
+    const { error } = await setDriverReady(account.id, location.lat, location.lng);
+    if (error) { Alert.alert(t('shared.error'), t('driverHome.statusUpdateError')); setStatus('idle'); return; }
     setStatus('waiting');
   }
 
@@ -148,177 +162,408 @@ export default function DriverHomeScreen({ navigation }) {
     setLocation(null);
   }
 
-  // ── AD PLACEHOLDER ──────────────────────────────────────────
-  // Replace this Modal with your actual ad SDK component
-  const AdModal = () => (
-    <Modal visible={showAd} animationType="slide" transparent={false}>
-      <View style={styles.adContainer}>
-        <Text style={styles.adTitle}>{t('shared.adTitle')}</Text>
-        <Text style={styles.adSubtitle}>{t('shared.adPlayable')}</Text>
-        <Text style={styles.adNote}>
-          Replace this with your ad SDK component.{'\n'}
-          Call handleAdComplete() when the ad finishes.
-        </Text>
-        <TouchableOpacity style={styles.adButton} onPress={handleAdComplete}>
-          <Text style={styles.adButtonText}>{t('shared.adComplete')}</Text>
-        </TouchableOpacity>
-      </View>
-    </Modal>
-  );
+  // ── Hero status copy ─────────────────────────────────────────
 
-  // ── JOB OFFER BANNER ────────────────────────────────────────
-  const JobOfferBanner = () => {
+  function renderHeroStatus() {
+    if (status === 'loading') {
+      return (
+        <View style={s.heroStatusRow}>
+          <ActivityIndicator color={colors.primary} size="small" />
+          <Text style={s.heroMuted}>{t('driverHome.gettingLocation').toUpperCase()}</Text>
+        </View>
+      );
+    }
+    if (status === 'waiting') {
+      return (
+        <>
+          <View style={s.heroStatusRow}>
+            <View style={s.onlineDot} />
+            <Text style={s.heroOnline}>ONLINE</Text>
+          </View>
+          <Text style={s.heroWaiting}>{t('driverHome.waiting').toUpperCase()}</Text>
+          {location && (
+            <Text style={s.heroCoords}>
+              {location.lat.toFixed(5)}°  ·  {location.lng.toFixed(5)}°
+            </Text>
+          )}
+        </>
+      );
+    }
+    return <Text style={s.heroOffline}>{t('driverHome.offline').toUpperCase()}</Text>;
+  }
+
+  // ── Job offer card ───────────────────────────────────────────
+
+  function renderJobOffer() {
     if (!jobOffer) return null;
     return (
-      <View style={styles.offerBanner}>
-        <View style={styles.offerInfo}>
-          <Text style={styles.offerType}>
-            {jobOffer.type === 'ride_offer' ? t('driverHome.rideOffer') : t('driverHome.deliveryOffer')}
+      <View style={s.offerWrap}>
+        <View style={s.offerCard}>
+          <View style={s.offerTopRow}>
+            <Text style={s.offerType}>
+              {jobOffer.type === 'ride_offer'
+                ? t('driverHome.rideOffer')
+                : t('driverHome.deliveryOffer')}
+            </Text>
+            <Text style={s.offerTimerText}>{offerTimer}s</Text>
+          </View>
+          <Text style={s.offerDistance}>
+            {t('driverHome.kmAway', { distance: jobOffer.distance?.toFixed(1) ?? '?' })}
           </Text>
-          <Text style={styles.offerDetail}>{t('driverHome.kmAway', { distance: jobOffer.distance_km?.toFixed(1) })}</Text>
-        </View>
-        <Text style={styles.offerTimer}>{offerTimer}s</Text>
-        <View style={styles.offerButtons}>
-          <TouchableOpacity
-            style={styles.refuseBtn}
-            onPress={() => handleRefuse(jobOffer)}
-          >
-            <Text style={styles.refuseBtnText}>{t('driverHome.decline')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.acceptBtn} onPress={handleAccept}>
-            <Text style={styles.acceptBtnText}>{t('driverHome.accept')}</Text>
-          </TouchableOpacity>
+          <View style={s.offerBtns}>
+            <TouchableOpacity style={s.declineBtn} onPress={() => handleRefuse(jobOffer)}>
+              <Text style={s.declineBtnText}>{t('driverHome.decline').toUpperCase()}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.acceptBtn} onPress={handleAccept}>
+              <Text style={s.acceptBtnText}>{t('driverHome.accept').toUpperCase()}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     );
-  };
+  }
+
+  // ── Render ───────────────────────────────────────────────────
 
   return (
-    <View style={styles.container}>
-      <AdModal />
+    <View style={s.root}>
 
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>{t('driverHome.title')}</Text>
-        <View style={styles.headerRight}>
-          <TouchableOpacity
-            style={styles.headerBtn}
-            onPress={() => navigation.navigate('DriverStats')}
-          >
-            <Text style={styles.headerBtnText}>{t('driverHome.stats')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.headerBtn}
-            onPress={() => navigation.navigate('Instructions')}
-          >
-            <Text style={styles.headerBtnText}>{t('driverHome.help')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerBtn} onPress={logout}>
-            <Text style={styles.headerBtnText}>{t('auth.signOut')}</Text>
+      {/* Ad modal — replace with real ad SDK */}
+      <Modal visible={showAd} animationType="slide" transparent={false}>
+        <View style={s.adContainer}>
+          <Text style={s.adTitle}>{t('shared.adTitle').toUpperCase()}</Text>
+          <Text style={s.adSub}>{t('shared.adPlayable')}</Text>
+          <TouchableOpacity style={s.adBtn} onPress={handleAdComplete}>
+            <Text style={s.adBtnText}>{t('shared.adComplete').toUpperCase()}</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </Modal>
 
-      {/* Map */}
-      <View style={styles.mapContainer}>
+      {/* ── Hero panel ── */}
+      <SafeAreaView style={s.hero} edges={['top']}>
+
+        {/* Header row */}
+        <View style={s.heroHeader}>
+          <Text style={s.heroTitle}>MOTODASH</Text>
+          <View style={s.heroActions}>
+            <TouchableOpacity
+              style={s.heroBtn}
+              onPress={() => navigation.navigate('DriverStats')}
+            >
+              <Text style={s.heroBtnText}>{t('driverHome.stats').toUpperCase()}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={s.heroBtn}
+              onPress={() => navigation.navigate('Instructions')}
+            >
+              <Text style={s.heroBtnText}>{t('driverHome.help').toUpperCase()}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.heroBtn, s.heroBtnRed]} onPress={logout}>
+              <Text style={[s.heroBtnText, s.heroBtnRedText]}>
+                {t('auth.signOut').toUpperCase()}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Status */}
+        <View style={s.heroStatus}>{renderHeroStatus()}</View>
+
+      </SafeAreaView>
+
+      {/* ── Red slash divider ── */}
+      <SlashDivider />
+
+      {/* ── Map area ── */}
+      <View style={s.mapArea}>
         {location ? (
           <MapView
-            style={styles.map}
+            style={StyleSheet.absoluteFill}
             initialRegion={{
-              latitude: location.lat,
-              longitude: location.lng,
-              latitudeDelta: 0.02,
-              longitudeDelta: 0.02,
+              latitude: location.lat, longitude: location.lng,
+              latitudeDelta: 0.015,   longitudeDelta: 0.015,
             }}
           >
             <Marker
               coordinate={{ latitude: location.lat, longitude: location.lng }}
-              title="You"
-              pinColor="#2563eb"
+              pinColor={colors.primary}
             />
           </MapView>
         ) : (
-          <View style={styles.mapPlaceholder}>
-            <Text style={styles.mapPlaceholderText}>
-              {t('driverHome.markReadyFirst')}
+          <View style={s.mapPlaceholder}>
+            <Image
+              source={require('../../../assets/logo.png')}
+              style={s.placeholderLogo}
+              resizeMode="contain"
+            />
+            <Text style={s.mapPlaceholderText}>
+              {t('driverHome.markReadyFirst').toUpperCase()}
             </Text>
           </View>
         )}
+
+        {/* Job offer floats over map */}
+        {renderJobOffer()}
       </View>
 
-      {/* Status bar */}
-      <View style={styles.statusBar}>
+      {/* ── Footer action ── */}
+      <SafeAreaView style={s.footer} edges={['bottom']}>
         {status === 'idle' && (
-          <Text style={styles.statusText}>{t('driverHome.offline')}</Text>
-        )}
-        {status === 'loading' && (
-          <ActivityIndicator color="#2563eb" />
-        )}
-        {status === 'waiting' && (
-          <Text style={styles.statusTextActive}>
-            {t('driverHome.waiting')}
-          </Text>
-        )}
-      </View>
-
-      {/* Job offer banner */}
-      <JobOfferBanner />
-
-      {/* Main action button */}
-      <View style={styles.footer}>
-        {status === 'idle' && (
-          <TouchableOpacity style={styles.readyBtn} onPress={handleMarkReady}>
-            <Text style={styles.readyBtnText}>{t('driverHome.markReady')}</Text>
+          <TouchableOpacity style={s.primaryBtn} onPress={handleMarkReady}>
+            <Text style={s.primaryBtnText}>{t('driverHome.markReady').toUpperCase()}</Text>
           </TouchableOpacity>
         )}
         {status === 'waiting' && (
-          <TouchableOpacity style={styles.offlineBtn} onPress={handleGoOffline}>
-            <Text style={styles.offlineBtnText}>{t('driverHome.goOffline')}</Text>
+          <TouchableOpacity style={s.secondaryBtn} onPress={handleGoOffline}>
+            <Text style={s.secondaryBtnText}>{t('driverHome.goOffline').toUpperCase()}</Text>
           </TouchableOpacity>
         )}
         {status === 'loading' && (
-          <View style={[styles.readyBtn, { opacity: 0.6 }]}>
-            <Text style={styles.readyBtnText}>{t('driverHome.gettingLocation')}</Text>
+          <View style={[s.primaryBtn, { opacity: 0.5 }]}>
+            <ActivityIndicator color={colors.onDark} />
           </View>
         )}
-      </View>
+      </SafeAreaView>
+
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container:          { flex: 1, backgroundColor: '#fff' },
-  header:             { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, borderBottomWidth: 1, borderColor: '#eee' },
-  headerTitle:        { fontSize: 20, fontWeight: '700', color: '#1a1a1a' },
-  headerRight:        { flexDirection: 'row', gap: 12 },
-  headerBtn:          { padding: 6 },
-  headerBtnText:      { color: '#2563eb', fontSize: 14, fontWeight: '500' },
-  mapContainer:       { flex: 1 },
-  map:                { flex: 1 },
-  mapPlaceholder:     { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f3f4f6' },
-  mapPlaceholderText: { color: '#9ca3af', fontSize: 15, textAlign: 'center', paddingHorizontal: 32 },
-  statusBar:          { paddingVertical: 12, alignItems: 'center', borderTopWidth: 1, borderColor: '#eee' },
-  statusText:         { color: '#6b7280', fontSize: 15 },
-  statusTextActive:   { color: '#16a34a', fontSize: 15, fontWeight: '600' },
-  footer:             { padding: 16, paddingBottom: 32 },
-  readyBtn:           { backgroundColor: '#2563eb', borderRadius: 12, padding: 18, alignItems: 'center' },
-  readyBtnText:       { color: '#fff', fontSize: 16, fontWeight: '700' },
-  offlineBtn:         { backgroundColor: '#f3f4f6', borderRadius: 12, padding: 18, alignItems: 'center' },
-  offlineBtnText:     { color: '#374151', fontSize: 16, fontWeight: '600' },
-  offerBanner:        { position: 'absolute', bottom: 110, left: 16, right: 16, backgroundColor: '#fff', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 },
-  offerInfo:          { marginBottom: 8 },
-  offerType:          { fontSize: 17, fontWeight: '700', color: '#1a1a1a' },
-  offerDetail:        { fontSize: 14, color: '#6b7280', marginTop: 2 },
-  offerTimer:         { position: 'absolute', top: 16, right: 16, fontSize: 22, fontWeight: '700', color: '#dc2626' },
-  offerButtons:       { flexDirection: 'row', gap: 10, marginTop: 8 },
-  refuseBtn:          { flex: 1, backgroundColor: '#f3f4f6', borderRadius: 10, padding: 14, alignItems: 'center' },
-  refuseBtnText:      { color: '#374151', fontWeight: '600' },
-  acceptBtn:          { flex: 2, backgroundColor: '#16a34a', borderRadius: 10, padding: 14, alignItems: 'center' },
-  acceptBtnText:      { color: '#fff', fontWeight: '700', fontSize: 15 },
-  adContainer:        { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a1a1a', padding: 32 },
-  adTitle:            { fontSize: 24, fontWeight: '700', color: '#fff', marginBottom: 8 },
-  adSubtitle:         { fontSize: 16, color: '#9ca3af', marginBottom: 24 },
-  adNote:             { fontSize: 13, color: '#6b7280', textAlign: 'center', marginBottom: 32, lineHeight: 20 },
-  adButton:           { backgroundColor: '#2563eb', borderRadius: 12, padding: 16, alignItems: 'center', width: '100%' },
-  adButtonText:       { color: '#fff', fontWeight: '700', fontSize: 15 },
+// ── Styles ────────────────────────────────────────────────────
+
+const s = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.background },
+
+  // ── Hero panel ──
+  hero: { backgroundColor: colors.hero, paddingBottom: 14 },
+
+  heroHeader: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
+    paddingHorizontal: 16,
+    paddingTop:        10,
+    paddingBottom:     12,
+  },
+  heroTitle: {
+    fontSize:      18,
+    fontWeight:    '500',
+    color:         colors.onDark,
+    letterSpacing:  2,
+  },
+  heroActions: { flexDirection: 'row', gap: 6 },
+  heroBtn: {
+    paddingHorizontal: 9,
+    paddingVertical:   5,
+    borderRadius:      radius.sm,
+    backgroundColor:  'rgba(255,255,255,0.07)',
+  },
+  heroBtnText: {
+    fontSize:      10,
+    fontWeight:    '500',
+    color:         colors.mutedOnDark,
+    letterSpacing:  1.5,
+  },
+  heroBtnRed:     { backgroundColor: 'rgba(192,57,43,0.18)' },
+  heroBtnRedText: { color: colors.primary },
+
+  heroStatus: {
+    paddingHorizontal: 16,
+    paddingBottom:      2,
+    gap:                3,
+  },
+  heroStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  onlineDot:     { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.primary },
+  heroOnline: {
+    fontSize:     12,
+    fontWeight:   '500',
+    color:        colors.primary,
+    letterSpacing: 2,
+  },
+  heroWaiting: {
+    fontSize:     12,
+    color:        colors.mutedOnDark,
+    letterSpacing: 1.5,
+    marginTop:     1,
+  },
+  heroCoords: {
+    fontSize:      10,
+    color:         '#3d3d3d',
+    letterSpacing:  0.5,
+    marginTop:      5,
+    fontVariant:   ['tabular-nums'],
+  },
+  heroMuted: {
+    fontSize:     12,
+    color:        colors.mutedOnDark,
+    letterSpacing: 1.5,
+    marginLeft:    8,
+  },
+  heroOffline: {
+    fontSize:      16,
+    fontWeight:    '500',
+    color:         colors.mutedOnDark,
+    letterSpacing:  2,
+  },
+
+  // ── Map area ──
+  mapArea:        { flex: 1, backgroundColor: colors.surface },
+  mapPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
+  placeholderLogo: {
+    width:        '72%',
+    aspectRatio:  2500 / 1920,
+    marginBottom: 24,
+  },
+  mapPlaceholderText: {
+    fontSize:      12,
+    color:         colors.textSecondary,
+    letterSpacing:  1.5,
+    textAlign:     'center',
+    lineHeight:    20,
+  },
+
+  // ── Job offer card ──
+  offerWrap: {
+    position: 'absolute',
+    bottom:   16,
+    left:     16,
+    right:    16,
+  },
+  offerCard: {
+    backgroundColor: colors.surface,
+    borderRadius:    radius.md,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
+    padding:         16,
+    shadowColor:    '#000',
+    shadowOpacity:   0.1,
+    shadowRadius:    8,
+    shadowOffset:    { width: 0, height: 3 },
+    elevation:       6,
+  },
+  offerTopRow: {
+    flexDirection:  'row',
+    justifyContent: 'space-between',
+    alignItems:     'flex-start',
+    marginBottom:    4,
+  },
+  offerType: {
+    fontSize:      14,
+    fontWeight:    '500',
+    color:         colors.textPrimary,
+    letterSpacing:  1,
+    flex:           1,
+    marginRight:    8,
+  },
+  offerTimerText: {
+    fontSize:   20,
+    fontWeight: '500',
+    color:      colors.primary,
+  },
+  offerDistance: {
+    fontSize:      12,
+    color:         colors.textSecondary,
+    letterSpacing:  0.5,
+    marginBottom:   14,
+  },
+  offerBtns: { flexDirection: 'row', gap: 8 },
+  declineBtn: {
+    flex:            1,
+    backgroundColor: colors.background,
+    borderWidth:     1,
+    borderColor:     colors.border,
+    borderRadius:    radius.md,
+    paddingVertical: 11,
+    alignItems:      'center',
+  },
+  declineBtnText: {
+    fontSize:     11,
+    fontWeight:   '500',
+    color:        colors.textPrimary,
+    letterSpacing: 1.5,
+  },
+  acceptBtn: {
+    flex:            2,
+    backgroundColor: colors.primary,
+    borderRadius:    radius.md,
+    paddingVertical: 11,
+    alignItems:      'center',
+  },
+  acceptBtnText: {
+    fontSize:     11,
+    fontWeight:   '500',
+    color:        colors.onDark,
+    letterSpacing: 1.5,
+  },
+
+  // ── Footer ──
+  footer: {
+    paddingHorizontal: 16,
+    paddingTop:        12,
+    paddingBottom:      4,
+    backgroundColor:   colors.background,
+    borderTopWidth:     1,
+    borderTopColor:    colors.border,
+  },
+  primaryBtn: {
+    backgroundColor: colors.primary,
+    borderRadius:    radius.md,
+    paddingVertical: 16,
+    alignItems:      'center',
+  },
+  primaryBtnText: {
+    color:         colors.onDark,
+    fontSize:      13,
+    fontWeight:    '500',
+    letterSpacing:  2,
+  },
+  secondaryBtn: {
+    backgroundColor: colors.surface,
+    borderRadius:    radius.md,
+    borderWidth:     1,
+    borderColor:     colors.border,
+    paddingVertical: 16,
+    alignItems:      'center',
+  },
+  secondaryBtnText: {
+    color:         colors.textPrimary,
+    fontSize:      13,
+    fontWeight:    '500',
+    letterSpacing:  2,
+  },
+
+  // ── Ad modal ──
+  adContainer: {
+    flex:           1,
+    justifyContent: 'center',
+    alignItems:     'center',
+    backgroundColor: colors.hero,
+    padding:         32,
+  },
+  adTitle: {
+    fontSize:      18,
+    fontWeight:    '500',
+    color:         colors.onDark,
+    letterSpacing:  2,
+    marginBottom:   8,
+  },
+  adSub: {
+    fontSize:    14,
+    color:       colors.mutedOnDark,
+    marginBottom: 36,
+    textAlign:   'center',
+  },
+  adBtn: {
+    backgroundColor:   colors.primary,
+    borderRadius:       radius.md,
+    paddingVertical:   14,
+    paddingHorizontal: 40,
+    alignItems:        'center',
+  },
+  adBtnText: {
+    color:         colors.onDark,
+    fontSize:      12,
+    fontWeight:    '500',
+    letterSpacing:  2,
+  },
 });

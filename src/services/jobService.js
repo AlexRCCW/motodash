@@ -142,12 +142,23 @@ export async function getDeliveryOrderDetail(jobId) {
   return { data, error };
 }
 
-export async function markOrderReady(jobId) {
+export async function markOrderReady(jobId, orderTotal, updatedItems) {
+  const fields = { status: 'accepted', order_total: Number(orderTotal) };
+  if (updatedItems) fields.items = updatedItems;
   const { error } = await supabase
     .from('delivery_jobs')
-    .update({ status: 'accepted' })
+    .update(fields)
     .eq('id', jobId)
     .eq('status', 'pending');
+  return { error };
+}
+
+export async function cancelDeliveryOrder(jobId, reason) {
+  const { error } = await supabase
+    .from('delivery_jobs')
+    .update({ status: 'canceled', cancel_reason: reason })
+    .eq('id', jobId)
+    .in('status', ['pending', 'accepted']);
   return { error };
 }
 
@@ -181,30 +192,22 @@ export async function markDeliveryPaid(jobId) {
   return { error };
 }
 
-export async function getReadyPreferredDrivers(storeId) {
-  const { data: preferred, error: prefError } = await supabase
+export async function addPreferredDriver(storeId, driverId) {
+  const { error } = await supabase
     .from('preferred_drivers')
-    .select('driver_id')
-    .eq('store_id', storeId);
+    .insert({ store_id: storeId, driver_id: driverId });
+  // code '23505' = unique_violation → driver already preferred, treat as success
+  if (error && error.code !== '23505') return { error };
+  return { error: null };
+}
 
-  if (prefError || !preferred?.length) return { data: [], error: prefError };
-
-  const driverIds = preferred.map(p => p.driver_id);
-
-  const { data: profiles } = await supabase
-    .from('driver_profiles')
-    .select('id')
-    .in('id', driverIds)
-    .eq('ready_for_rides', true);
-
-  if (!profiles?.length) return { data: [] };
-
-  const readyIds = profiles.map(p => p.id);
-
+export async function getReadyPreferredDrivers(storeId) {
+  // SECURITY DEFINER RPC — the 3-query chain fails because accounts RLS
+  // blocks reading rows where id ≠ auth.uid(). The RPC bypasses that.
+  // ready_for_rides filter removed: preferred drivers are trusted by the store
+  // and should always appear so the store can contact / assign them directly.
   const { data, error } = await supabase
-    .from('accounts')
-    .select('id, name')
-    .in('id', readyIds);
+    .rpc('get_preferred_drivers_for_store', { p_store_id: storeId });
 
   return { data: data ?? [], error };
 }
@@ -337,6 +340,31 @@ export async function incrementDriverRefusals(driverId) {
     .eq('id', driverId);
 
   return { limitReached };
+}
+
+// ── STORE STOREFRONT PHOTO ────────────────────────────────────
+
+// base64 string from ImageManipulator; uploads to store-fronts/{userId}/storefront.jpg
+export async function uploadStorefrontPhoto(userId, base64) {
+  const path = `${userId}/storefront.jpg`;
+
+  const binaryStr = atob(base64);
+  const bytes     = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+
+  const { error } = await supabase.storage
+    .from('store-fronts')
+    .upload(path, bytes, { contentType: 'image/jpeg', upsert: true });
+
+  if (error) return { url: null, error };
+
+  const { data } = supabase.storage
+    .from('store-fronts')
+    .getPublicUrl(path);
+
+  return { url: data.publicUrl, error: null };
 }
 
 // ── EDGE FUNCTION DISPATCH ────────────────────────────────────

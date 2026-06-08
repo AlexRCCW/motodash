@@ -10,6 +10,7 @@ import { logout } from '../../services/authService';
 import { t } from '../../i18n';
 import { getRideJob, getDeliveryJob } from '../../services/jobService';
 import { registerForPushNotifications } from '../../services/notificationService';
+import { colors, SlashDivider, radius } from '../../theme';
 
 export default function ClientHomeScreen({ navigation }) {
   const { account } = useAuth();
@@ -54,41 +55,52 @@ export default function ClientHomeScreen({ navigation }) {
 
   if (checking) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <View style={styles.root}>
+        <SafeAreaView style={styles.hero} edges={['top']}>
+          <View style={styles.heroHeader}>
+            <Text style={styles.heroTitle}>MOTODASH</Text>
+          </View>
+        </SafeAreaView>
+        <SlashDivider />
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#2563eb" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.root}>
 
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>{t('auth.appName')}</Text>
-        <View style={styles.headerRight}>
-          <TouchableOpacity onPress={() => navigation.navigate('Instructions')}>
-            <Text style={styles.headerBtn}>{t('clientHome.help')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={logout}>
-            <Text style={styles.headerBtn}>{t('auth.signOut')}</Text>
-          </TouchableOpacity>
+      {/* ── Hero panel ── */}
+      <SafeAreaView style={styles.hero} edges={['top']}>
+        <View style={styles.heroHeader}>
+          <Text style={styles.heroTitle}>MOTODASH</Text>
+          <View style={styles.heroActions}>
+            <TouchableOpacity style={styles.heroBtn} onPress={() => navigation.navigate('Instructions')}>
+              <Text style={styles.heroBtnText}>{t('clientHome.help').toUpperCase()}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.heroBtn, styles.heroBtnRed]} onPress={logout}>
+              <Text style={[styles.heroBtnText, styles.heroBtnRedText]}>{t('auth.signOut').toUpperCase()}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </SafeAreaView>
 
-      {/* Content — simple top-to-bottom stack, no flex distribution */}
+      {/* ── Red slash divider ── */}
+      <SlashDivider />
+
+      {/* Content */}
       <View style={styles.content}>
 
-        {/* Logo — explicit width so layout is unambiguous */}
+        {/* Logo */}
         <Image
           source={require('../../../assets/logo.png')}
           style={styles.logo}
           resizeMode="contain"
         />
 
-        {/* Greeting + action cards below */}
+        {/* Greeting */}
         <Text style={styles.greeting}>
           {t('clientHome.greeting', { name: account?.name?.split(' ')[0] })}
         </Text>
@@ -100,7 +112,7 @@ export default function ClientHomeScreen({ navigation }) {
         >
           <Text style={styles.actionIcon}>🏍️</Text>
           <View style={styles.actionInfo}>
-            <Text style={styles.actionTitle}>{t('clientHome.requestRide')}</Text>
+            <Text style={styles.actionTitle}>{t('clientHome.requestRide').toUpperCase()}</Text>
             <Text style={styles.actionDesc}>{t('clientHome.requestRideDesc')}</Text>
           </View>
           <Text style={styles.actionArrow}>›</Text>
@@ -112,68 +124,90 @@ export default function ClientHomeScreen({ navigation }) {
         >
           <Text style={styles.actionIcon}>🛒</Text>
           <View style={styles.actionInfo}>
-            <Text style={styles.actionTitle}>{t('clientHome.placeOrder')}</Text>
+            <Text style={styles.actionTitle}>{t('clientHome.placeOrder').toUpperCase()}</Text>
             <Text style={styles.actionDesc}>{t('clientHome.placeOrderDesc')}</Text>
           </View>
           <Text style={styles.actionArrow}>›</Text>
         </TouchableOpacity>
 
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea:    { flex: 1, backgroundColor: '#fff' },
-  centered:    { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  root:    { flex: 1, backgroundColor: colors.background },
+  centered:{ flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  // Header — SafeAreaView now handles the top inset, no manual paddingTop
-  header: {
-    flexDirection:  'row',
-    justifyContent: 'space-between',
-    alignItems:     'center',
+  // ── Hero panel ──
+  hero: { backgroundColor: colors.hero, paddingBottom: 14 },
+  heroHeader: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
     paddingHorizontal: 16,
-    paddingVertical:   14,
-    borderBottomWidth: 1,
-    borderColor:       '#eee',
+    paddingTop:        10,
+    paddingBottom:     4,
   },
-  headerTitle: { fontSize: 20, fontWeight: '700', color: '#1a1a1a' },
-  headerRight: { flexDirection: 'row', gap: 16 },
-  headerBtn:   { color: '#2563eb', fontSize: 14, fontWeight: '500' },
+  heroTitle:   { fontSize: 18, fontWeight: '500', color: colors.onDark, letterSpacing: 2 },
+  heroActions: { flexDirection: 'row', gap: 6 },
+  heroBtn: {
+    paddingHorizontal: 9,
+    paddingVertical:   5,
+    borderRadius:      radius.sm,
+    backgroundColor:  'rgba(255,255,255,0.07)',
+  },
+  heroBtnText:    { fontSize: 10, fontWeight: '500', color: colors.mutedOnDark, letterSpacing: 1.5 },
+  heroBtnRed:     { backgroundColor: 'rgba(192,57,43,0.18)' },
+  heroBtnRedText: { color: colors.primary },
 
-  // Content — vertical stack, no flex distribution tricks
   content: {
     flex:              1,
     paddingHorizontal: 24,
     paddingBottom:     24,
   },
 
-  // Logo — explicit size avoids any ambiguity with Yoga / Metro @1x resolution
-  // 300pt @1x natural width; @2x/@3x variants are picked up automatically
   logo: {
-    alignSelf:   'center',
-    width:       '78%',          // ~78% of content width (≈300pt on iPhone 14)
-    aspectRatio: 2500 / 1920,    // 1.302 — matches source image proportions
-    marginTop:   16,
+    alignSelf:    'center',
+    width:        '78%',
+    aspectRatio:  2500 / 1920,
+    marginTop:    16,
     marginBottom: 8,
   },
 
-  greeting: { fontSize: 26, fontWeight: '700', color: '#1a1a1a', marginBottom: 4 },
-  subtitle: { fontSize: 16, color: '#6b7280', marginBottom: 20 },
+  greeting: {
+    fontSize:   24,
+    fontWeight: '500',
+    color:      colors.textPrimary,
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize:     15,
+    color:        colors.textSecondary,
+    marginBottom: 20,
+  },
 
   actionCard: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    backgroundColor: '#f8fafc',
-    borderRadius:   16,
-    padding:        20,
-    marginBottom:   12,
-    borderWidth:    1,
-    borderColor:    '#e2e8f0',
+    flexDirection:   'row',
+    alignItems:      'center',
+    backgroundColor: colors.surface,
+    borderRadius:    radius.md,
+    padding:         20,
+    marginBottom:    12,
+    borderWidth:     1,
+    borderColor:     colors.border,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
   },
-  actionIcon:  { fontSize: 36, marginRight: 16 },
+  actionIcon:  { fontSize: 32, marginRight: 16 },
   actionInfo:  { flex: 1 },
-  actionTitle: { fontSize: 17, fontWeight: '700', color: '#1a1a1a' },
-  actionDesc:  { fontSize: 14, color: '#6b7280', marginTop: 3 },
-  actionArrow: { fontSize: 24, color: '#9ca3af' },
+  actionTitle: {
+    fontSize:      13,
+    fontWeight:    '500',
+    color:         colors.textPrimary,
+    letterSpacing:  1.5,
+    textTransform: 'uppercase',
+  },
+  actionDesc: { fontSize: 13, color: colors.textSecondary, marginTop: 4 },
+  actionArrow:{ fontSize: 22, color: colors.textSecondary },
 });

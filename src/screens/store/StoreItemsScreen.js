@@ -12,6 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 import {
   getStoreItems, upsertStoreItem, deleteStoreItem, uploadProductImage,
 } from '../../services/jobService';
+import { colors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 
 const EMPTY_FORM = { name: '', price: '', stockCount: '' };
@@ -144,8 +145,6 @@ export default function StoreItemsScreen({ navigation }) {
 
     if (!result.canceled && result.assets?.length > 0) {
       // Resize to max 300×300 and compress — keeps uploads well under 80 KB
-      // The 1:1 crop above guarantees the output is also square (300×300)
-      // base64: true gives us the encoded data directly — no expo-file-system needed
       const resized = await ImageManipulator.manipulateAsync(
         result.assets[0].uri,
         [{ resize: { width: 300 } }],
@@ -271,7 +270,7 @@ export default function StoreItemsScreen({ navigation }) {
             <Text style={styles.itemCardPrice}>${Number(item.price).toFixed(2)}</Text>
             {outOfStock && (
               <View style={styles.outOfStockBadge}>
-                <Text style={styles.outOfStockText}>{t('storeItems.outOfStock')}</Text>
+                <Text style={styles.outOfStockText}>{t('storeItems.outOfStock').toUpperCase()}</Text>
               </View>
             )}
           </View>
@@ -284,11 +283,21 @@ export default function StoreItemsScreen({ navigation }) {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <View style={styles.root}>
+        <SafeAreaView style={styles.hero} edges={['top']}>
+          <View style={styles.heroHeader}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.heroBackBtn}>
+              <Text style={styles.heroBackText}>{t('shared.back').toUpperCase()}</Text>
+            </TouchableOpacity>
+            <Text style={styles.heroTitle}>{t('storeItems.title').toUpperCase()}</Text>
+            <View style={{ width: 80 }} />
+          </View>
+        </SafeAreaView>
+        <SlashDivider />
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#16a34a" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -297,18 +306,23 @@ export default function StoreItemsScreen({ navigation }) {
   const previewUri = localImageUri ?? editingItem?.image_url ?? null;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.root}>
 
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>{t('shared.back')}</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('storeItems.title')}</Text>
-        <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
-          <Text style={styles.addBtnText}>{t('storeItems.addItem')}</Text>
-        </TouchableOpacity>
-      </View>
+      {/* ── Hero panel ── */}
+      <SafeAreaView style={styles.hero} edges={['top']}>
+        <View style={styles.heroHeader}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.heroBackBtn}>
+            <Text style={styles.heroBackText}>{t('shared.back').toUpperCase()}</Text>
+          </TouchableOpacity>
+          <Text style={styles.heroTitle}>{t('storeItems.title').toUpperCase()}</Text>
+          <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
+            <Text style={styles.addBtnText}>{t('storeItems.addItem').toUpperCase()}</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+
+      {/* ── Red slash divider ── */}
+      <SlashDivider />
 
       {/* Items list */}
       <FlatList
@@ -318,7 +332,7 @@ export default function StoreItemsScreen({ navigation }) {
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>{t('storeItems.noItems')}</Text>
+            <Text style={styles.emptyTitle}>{t('storeItems.noItems').toUpperCase()}</Text>
             <Text style={styles.emptySubtitle}>{t('storeItems.noItemsSubtext')}</Text>
           </View>
         }
@@ -337,7 +351,7 @@ export default function StoreItemsScreen({ navigation }) {
         >
           <View style={styles.modalSheet}>
             <Text style={styles.modalTitle}>
-              {editingItem ? t('storeItems.editItem') : t('storeItems.newItem')}
+              {(editingItem ? t('storeItems.editItem') : t('storeItems.newItem')).toUpperCase()}
             </Text>
 
             <ScrollView
@@ -359,7 +373,7 @@ export default function StoreItemsScreen({ navigation }) {
                     />
                     <View style={styles.imageOverlay}>
                       <Text style={styles.imageOverlayText}>
-                        {t('storeItems.changePhoto')}
+                        {t('storeItems.changePhoto').toUpperCase()}
                       </Text>
                     </View>
                   </>
@@ -367,42 +381,42 @@ export default function StoreItemsScreen({ navigation }) {
                   <View style={styles.imagePlaceholder}>
                     <Text style={styles.imagePlaceholderIcon}>📷</Text>
                     <Text style={styles.imagePlaceholderLabel}>
-                      {t('storeItems.addPhoto')}
+                      {t('storeItems.addPhoto').toUpperCase()}
                     </Text>
                   </View>
                 )}
               </TouchableOpacity>
 
               {/* ── Fields ── */}
-              <Text style={styles.fieldLabel}>{t('storeItems.itemName')}</Text>
+              <Text style={styles.fieldLabel}>{t('storeItems.itemName').toUpperCase()}</Text>
               <TextInput
                 style={styles.input}
                 value={form.name}
                 onChangeText={v => setForm(f => ({ ...f, name: v }))}
                 placeholder={t('storeItems.itemName')}
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textSecondary}
                 autoCapitalize="words"
                 returnKeyType="next"
               />
 
-              <Text style={styles.fieldLabel}>{t('storeItems.price')}</Text>
+              <Text style={styles.fieldLabel}>{t('storeItems.price').toUpperCase()}</Text>
               <TextInput
                 style={styles.input}
                 value={form.price}
                 onChangeText={v => setForm(f => ({ ...f, price: v }))}
                 placeholder="0.00"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textSecondary}
                 keyboardType="decimal-pad"
                 returnKeyType="next"
               />
 
-              <Text style={styles.fieldLabel}>{t('storeItems.inventory')}</Text>
+              <Text style={styles.fieldLabel}>{t('storeItems.inventory').toUpperCase()}</Text>
               <TextInput
                 style={styles.input}
                 value={form.stockCount}
                 onChangeText={v => setForm(f => ({ ...f, stockCount: v }))}
                 placeholder="0"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textSecondary}
                 keyboardType="number-pad"
                 returnKeyType="done"
               />
@@ -416,7 +430,7 @@ export default function StoreItemsScreen({ navigation }) {
                   onPress={handleDelete}
                   disabled={saving}
                 >
-                  <Text style={styles.deleteBtnText}>{t('storeItems.delete')}</Text>
+                  <Text style={styles.deleteBtnText}>{t('storeItems.delete').toUpperCase()}</Text>
                 </TouchableOpacity>
               )}
               <View style={styles.modalBtnsRight}>
@@ -425,7 +439,7 @@ export default function StoreItemsScreen({ navigation }) {
                   onPress={closeModal}
                   disabled={saving}
                 >
-                  <Text style={styles.cancelBtnText}>{t('storeItems.cancel')}</Text>
+                  <Text style={styles.cancelBtnText}>{t('storeItems.cancel').toUpperCase()}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
@@ -433,8 +447,8 @@ export default function StoreItemsScreen({ navigation }) {
                   disabled={saving}
                 >
                   {saving
-                    ? <ActivityIndicator color="#fff" size="small" />
-                    : <Text style={styles.saveBtnText}>{t('storeItems.save')}</Text>
+                    ? <ActivityIndicator color={colors.onDark} size="small" />
+                    : <Text style={styles.saveBtnText}>{t('storeItems.save').toUpperCase()}</Text>
                   }
                 </TouchableOpacity>
               </View>
@@ -443,48 +457,54 @@ export default function StoreItemsScreen({ navigation }) {
         </KeyboardAvoidingView>
       </Modal>
 
-    </SafeAreaView>
+    </View>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#fff' },
-  center:   { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  root:  { flex: 1, backgroundColor: colors.background },
+  center:{ flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  // Header
-  header: {
+  // ── Hero panel ──
+  hero: { backgroundColor: colors.hero, paddingBottom: 14 },
+  heroHeader: {
     flexDirection:     'row',
     alignItems:        'center',
     paddingHorizontal: 16,
-    paddingVertical:   12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    paddingTop:        10,
+    paddingBottom:     4,
     gap:               8,
   },
-  backBtn:     { paddingRight: 4 },
-  backText:    { fontSize: 14, color: '#16a34a', fontWeight: '600' },
-  headerTitle: { flex: 1, fontSize: 16, fontWeight: '700', color: '#1a1a1a' },
+  heroBackBtn:  { width: 60 },
+  heroBackText: { fontSize: 11, fontWeight: '500', color: colors.mutedOnDark, letterSpacing: 1.5 },
+  heroTitle:    { flex: 1, fontSize: 14, fontWeight: '500', color: colors.onDark, letterSpacing: 2 },
   addBtn: {
-    backgroundColor:   '#16a34a',
-    paddingHorizontal: 12,
-    paddingVertical:    7,
-    borderRadius:       8,
+    backgroundColor:   colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical:    6,
+    borderRadius:       radius.sm,
   },
-  addBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  addBtnText: {
+    fontSize:      10,
+    fontWeight:    '500',
+    color:         colors.onDark,
+    letterSpacing:  1.5,
+    textTransform: 'uppercase',
+  },
 
   // List
   listContent: { padding: 16, paddingBottom: 40 },
 
   // Item card
   itemCard: {
-    backgroundColor: '#f9fafb',
-    borderRadius:    12,
+    backgroundColor: colors.surface,
+    borderRadius:    radius.md,
     padding:         12,
     marginBottom:    10,
     borderWidth:     1,
-    borderColor:     '#e5e7eb',
+    borderColor:     colors.border,
   },
   itemCardMain: {
     flexDirection: 'row',
@@ -496,69 +516,86 @@ const styles = StyleSheet.create({
   thumbnail: {
     width:        56,
     height:       56,
-    borderRadius: 8,
-    backgroundColor: '#e5e7eb',
+    borderRadius: radius.sm,
+    backgroundColor: colors.border,
   },
   thumbnailPlaceholder: {
     width:           56,
     height:          56,
-    borderRadius:     8,
-    backgroundColor: '#f3f4f6',
+    borderRadius:    radius.sm,
+    backgroundColor: colors.border,
     justifyContent:  'center',
     alignItems:      'center',
   },
   thumbnailIcon: { fontSize: 24 },
 
   itemCardLeft:  { flex: 1 },
-  itemCardName:  { fontSize: 15, fontWeight: '600', color: '#1a1a1a', marginBottom: 4 },
-  itemCardStock: { fontSize: 13, color: '#6b7280' },
+  itemCardName:  { fontSize: 15, fontWeight: '500', color: colors.textPrimary, marginBottom: 4 },
+  itemCardStock: { fontSize: 12, color: colors.textSecondary },
   itemCardRight: { alignItems: 'flex-end', gap: 6 },
-  itemCardPrice: { fontSize: 15, fontWeight: '700', color: '#1a1a1a' },
+  itemCardPrice: { fontSize: 15, fontWeight: '500', color: colors.primary },
 
   outOfStockBadge: {
-    backgroundColor:   '#fee2e2',
-    paddingHorizontal: 8,
-    paddingVertical:   3,
-    borderRadius:      6,
+    backgroundColor:   colors.surface,
+    borderWidth:       1,
+    borderColor:       colors.primary,
+    paddingHorizontal: 7,
+    paddingVertical:   2,
+    borderRadius:      radius.sm,
   },
-  outOfStockText: { fontSize: 11, fontWeight: '600', color: '#dc2626' },
+  outOfStockText: {
+    fontSize:      10,
+    fontWeight:    '500',
+    color:         colors.primary,
+    letterSpacing:  1,
+    textTransform: 'uppercase',
+  },
 
   // Empty state
   emptyState:    { flex: 1, alignItems: 'center', paddingTop: 60 },
-  emptyTitle:    { fontSize: 16, fontWeight: '600', color: '#9ca3af', marginBottom: 6 },
-  emptySubtitle: { fontSize: 13, color: '#d1d5db', textAlign: 'center' },
+  emptyTitle: {
+    fontSize:      13,
+    fontWeight:    '500',
+    color:         colors.textSecondary,
+    marginBottom:  6,
+    letterSpacing:  1.5,
+    textTransform: 'uppercase',
+  },
+  emptySubtitle: { fontSize: 13, color: colors.textSecondary, textAlign: 'center' },
 
   // Modal
   modalOverlay: {
     flex:            1,
     justifyContent:  'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   modalSheet: {
-    backgroundColor:      '#fff',
-    borderTopLeftRadius:  20,
-    borderTopRightRadius: 20,
+    backgroundColor:      colors.background,
+    borderTopLeftRadius:  radius.md,
+    borderTopRightRadius: radius.md,
     padding:              24,
     paddingBottom:        36,
     maxHeight:            '90%',
   },
   modalTitle: {
-    fontSize:     18,
-    fontWeight:   '700',
-    color:        '#1a1a1a',
-    marginBottom: 16,
+    fontSize:      13,
+    fontWeight:    '500',
+    color:         colors.textPrimary,
+    marginBottom:  16,
+    letterSpacing:  2,
+    textTransform: 'uppercase',
   },
 
   // Image picker in modal
   imagePicker: {
-    height:           180,
-    borderRadius:     12,
-    marginBottom:     16,
-    overflow:         'hidden',
-    backgroundColor:  '#f3f4f6',
-    borderWidth:      1,
-    borderColor:      '#e5e7eb',
-    borderStyle:      'dashed',
+    height:          180,
+    borderRadius:    radius.md,
+    marginBottom:    16,
+    overflow:        'hidden',
+    backgroundColor: colors.surface,
+    borderWidth:     1,
+    borderColor:     colors.border,
+    borderStyle:     'dashed',
   },
   imagePreview: {
     width:  '100%',
@@ -572,9 +609,11 @@ const styles = StyleSheet.create({
     paddingBottom:   12,
   },
   imageOverlayText: {
-    color:      '#fff',
-    fontSize:   14,
-    fontWeight: '600',
+    color:         colors.onDark,
+    fontSize:      11,
+    fontWeight:    '500',
+    letterSpacing:  1.5,
+    textTransform: 'uppercase',
   },
   imagePlaceholder: {
     flex:           1,
@@ -583,26 +622,32 @@ const styles = StyleSheet.create({
     gap:            8,
   },
   imagePlaceholderIcon:  { fontSize: 36 },
-  imagePlaceholderLabel: { fontSize: 14, color: '#6b7280', fontWeight: '500' },
+  imagePlaceholderLabel: {
+    fontSize:      11,
+    color:         colors.textSecondary,
+    fontWeight:    '500',
+    letterSpacing:  1.5,
+    textTransform: 'uppercase',
+  },
 
   // Form
   fieldLabel: {
-    fontSize:      12,
-    fontWeight:    '600',
-    color:         '#6b7280',
+    fontSize:      11,
+    fontWeight:    '500',
+    color:         colors.textSecondary,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing:  1.5,
     marginBottom:  6,
   },
   input: {
     borderWidth:       1,
-    borderColor:       '#d1d5db',
-    borderRadius:      10,
+    borderColor:       colors.border,
+    borderRadius:      radius.md,
     paddingHorizontal: 14,
     paddingVertical:   11,
     fontSize:          15,
-    color:             '#1a1a1a',
-    backgroundColor:   '#f9fafb',
+    color:             colors.textPrimary,
+    backgroundColor:   colors.surface,
     marginBottom:      14,
   },
 
@@ -610,13 +655,51 @@ const styles = StyleSheet.create({
   modalBtns:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
   modalBtnsRight: { flexDirection: 'row', gap: 10 },
 
-  deleteBtn:     { paddingHorizontal: 14, paddingVertical: 11, borderRadius: 10, backgroundColor: '#fee2e2' },
-  deleteBtnText: { fontSize: 14, fontWeight: '600', color: '#dc2626' },
+  deleteBtn: {
+    paddingHorizontal: 14,
+    paddingVertical:   11,
+    borderRadius:      radius.md,
+    borderWidth:       1,
+    borderColor:       colors.primary,
+  },
+  deleteBtnText: {
+    fontSize:      11,
+    fontWeight:    '500',
+    color:         colors.primary,
+    letterSpacing:  1.5,
+    textTransform: 'uppercase',
+  },
 
-  cancelBtn:     { paddingHorizontal: 14, paddingVertical: 11, borderRadius: 10, backgroundColor: '#f3f4f6' },
-  cancelBtnText: { fontSize: 14, fontWeight: '600', color: '#374151' },
+  cancelBtn: {
+    paddingHorizontal: 14,
+    paddingVertical:   11,
+    borderRadius:      radius.md,
+    backgroundColor:   colors.surface,
+    borderWidth:       1,
+    borderColor:       colors.border,
+  },
+  cancelBtnText: {
+    fontSize:      11,
+    fontWeight:    '500',
+    color:         colors.textPrimary,
+    letterSpacing:  1.5,
+    textTransform: 'uppercase',
+  },
 
-  saveBtn:        { backgroundColor: '#16a34a', paddingHorizontal: 20, paddingVertical: 11, borderRadius: 10, minWidth: 80, alignItems: 'center' },
+  saveBtn: {
+    backgroundColor:   colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical:   11,
+    borderRadius:      radius.md,
+    minWidth:          80,
+    alignItems:        'center',
+  },
   saveBtnDisabled:{ opacity: 0.6 },
-  saveBtnText:    { fontSize: 14, fontWeight: '700', color: '#fff' },
+  saveBtnText: {
+    fontSize:      11,
+    fontWeight:    '500',
+    color:         colors.onDark,
+    letterSpacing:  1.5,
+    textTransform: 'uppercase',
+  },
 });

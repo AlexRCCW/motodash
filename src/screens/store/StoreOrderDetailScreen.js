@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Alert,
+  ActivityIndicator, Alert, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
@@ -13,18 +13,20 @@ import {
   markDeliveryPaid,
   getReadyPreferredDrivers,
   dispatchJob,
+  cancelDeliveryOrder,
 } from '../../services/jobService';
+import { colors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 
 // ── Status display config ─────────────────────────────────────
 
 const STATUS_CONFIG = {
-  pending:          { color: '#d97706', bg: '#fef3c7' },
-  accepted:         { color: '#2563eb', bg: '#dbeafe' },
-  out_for_delivery: { color: '#7c3aed', bg: '#ede9fe' },
-  delivered:        { color: '#16a34a', bg: '#dcfce7' },
-  canceled:         { color: '#6b7280', bg: '#f3f4f6' },
-  returned:         { color: '#dc2626', bg: '#fee2e2' },
+  pending:          { color: colors.primary },
+  accepted:         { color: colors.textPrimary },
+  out_for_delivery: { color: colors.primary },
+  delivered:        { color: colors.textPrimary },
+  canceled:         { color: colors.textSecondary },
+  returned:         { color: colors.primary },
 };
 
 // ── Screen ────────────────────────────────────────────────────
@@ -37,6 +39,8 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
   const [client,           setClient]           = useState(null);
   const [preferredDrivers, setPreferredDrivers] = useState([]);
   const [itemStates,       setItemStates]       = useState({});  // { [idx]: 'pulled'|'unavailable'|null }
+  const [orderTotal,       setOrderTotal]       = useState('');  // editable by store
+  const [otherPrices,      setOtherPrices]      = useState({});  // { [idx]: string } for other items
   const [loading,          setLoading]          = useState(true);
   const [submitting,       setSubmitting]       = useState(false);
   const [dispatching,      setDispatching]      = useState(false);
@@ -48,14 +52,21 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
     if (error || !jobData) { setLoading(false); return; }
     setJob(jobData);
 
-    // Load client account
-    if (jobData.client_id) {
-      const { data: clientData } = await supabase
-        .from('accounts')
-        .select('name, phone')
-        .eq('id', jobData.client_id)
-        .single();
-      setClient(clientData);
+    // Pre-populate order total: use existing value, or calculate from items
+    if (jobData.order_total != null) {
+      setOrderTotal(String(Number(jobData.order_total).toFixed(2)));
+    } else if (Array.isArray(jobData.items) && jobData.items.length > 0) {
+      const suggested = jobData.items.reduce(
+        (sum, item) => sum + Number(item.price) * (item.qty || 1), 0
+      );
+      setOrderTotal(suggested > 0 ? suggested.toFixed(2) : '');
+    }
+
+    // Load client via SECURITY DEFINER RPC — direct accounts query blocked by RLS
+    const { data: clientRows } = await supabase
+      .rpc('get_order_client', { p_job_id: jobId });
+    if (clientRows?.length > 0) {
+      setClient({ name: clientRows[0].client_name, phone: clientRows[0].client_phone });
     }
 
     // Load ready preferred drivers when order is accepted with no driver yet
@@ -99,6 +110,11 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
   // ── Actions ─────────────────────────────────────────────────
 
   function handleMarkReady() {
+    const total = parseFloat(orderTotal);
+    if (isNaN(total) || total <= 0) {
+      Alert.alert(t('shared.error'), t('storeOrder.totalRequired'));
+      return;
+    }
     Alert.alert(
       t('storeOrder.readyForDelivery'),
       '',
@@ -108,7 +124,14 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
           text: t('storeOrder.yesMarkReady'),
           onPress: async () => {
             setSubmitting(true);
-            const { error } = await markOrderReady(jobId);
+            // Build updated items array — inject store prices into other items
+            const updatedItems = (job?.items ?? []).map((item, idx) => {
+              if (item.isOther && otherPrices[idx] != null) {
+                return { ...item, price: parseFloat(otherPrices[idx]) || 0 };
+              }
+              return item;
+            });
+            const { error } = await markOrderReady(jobId, total, updatedItems);
             if (error) {
               Alert.alert(t('shared.error'), error.message);
             } else {
@@ -124,7 +147,7 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
   function handleAssignDriver(driver) {
     Alert.alert(
       t('storeOrder.assignDriver'),
-      t('storeOrder.confirmAssign', { name: driver.name }),
+      t('storeOrder.confirmAssign', { name: driver.driver_name }),
       [
         { text: t('shared.cancel'), style: 'cancel' },
         {
@@ -173,6 +196,35 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
     );
   }
 
+  function handleCancelOrder() {
+    Alert.prompt(
+      t('storeOrder.cancelReasonTitle'),
+      t('storeOrder.cancelReasonPlaceholder'),
+      [
+        { text: t('shared.cancel'), style: 'cancel' },
+        {
+          text:  t('storeOrder.yesCancelOrder'),
+          style: 'destructive',
+          onPress: async (reason) => {
+            if (!reason?.trim()) {
+              Alert.alert(t('shared.error'), 'Please enter a reason.');
+              return;
+            }
+            setSubmitting(true);
+            const { error } = await cancelDeliveryOrder(jobId, reason.trim());
+            if (error) {
+              Alert.alert(t('shared.error'), error.message);
+            } else {
+              await loadJob();
+            }
+            setSubmitting(false);
+          },
+        },
+      ],
+      'plain-text'
+    );
+  }
+
   // ── Render helpers ───────────────────────────────────────────
 
   function renderItems(items) {
@@ -181,7 +233,7 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
 
     return (
       <View style={styles.card}>
-        <Text style={styles.cardLabel}>{t('storeOrder.items')}</Text>
+        <Text style={styles.cardLabel}>{t('storeOrder.items').toUpperCase()}</Text>
         {items.map((item, idx) => (
           <View key={idx} style={styles.itemRow}>
             <View style={styles.itemInfo}>
@@ -194,35 +246,51 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
               </Text>
             </View>
             {isPending && (
-              <View style={styles.itemToggles}>
-                <TouchableOpacity
-                  style={[
-                    styles.toggleBtn,
-                    itemStates[idx] === 'pulled' && styles.toggleBtnPulled,
-                  ]}
-                  onPress={() => toggleItemState(idx, 'pulled')}
-                >
-                  <Text style={[
-                    styles.toggleText,
-                    itemStates[idx] === 'pulled' && styles.toggleTextActive,
-                  ]}>
-                    {t('storeOrder.pulled')}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.toggleBtn,
-                    itemStates[idx] === 'unavailable' && styles.toggleBtnUnavailable,
-                  ]}
-                  onPress={() => toggleItemState(idx, 'unavailable')}
-                >
-                  <Text style={[
-                    styles.toggleText,
-                    itemStates[idx] === 'unavailable' && styles.toggleTextActive,
-                  ]}>
-                    {t('storeOrder.unavailable')}
-                  </Text>
-                </TouchableOpacity>
+              <View>
+                {/* Price input for custom "other" items */}
+                {item.isOther && (
+                  <View style={styles.otherPriceRow}>
+                    <Text style={styles.otherPriceLabel}>{t('storeOrder.storePrice').toUpperCase()}</Text>
+                    <TextInput
+                      style={styles.otherPriceInput}
+                      value={otherPrices[idx] ?? ''}
+                      onChangeText={v => setOtherPrices(prev => ({ ...prev, [idx]: v }))}
+                      keyboardType="decimal-pad"
+                      placeholder="0.00"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                  </View>
+                )}
+                <View style={styles.itemToggles}>
+                  <TouchableOpacity
+                    style={[
+                      styles.toggleBtn,
+                      itemStates[idx] === 'pulled' && styles.toggleBtnPulled,
+                    ]}
+                    onPress={() => toggleItemState(idx, 'pulled')}
+                  >
+                    <Text style={[
+                      styles.toggleText,
+                      itemStates[idx] === 'pulled' && styles.toggleTextActive,
+                    ]}>
+                      {t('storeOrder.pulled').toUpperCase()}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.toggleBtn,
+                      itemStates[idx] === 'unavailable' && styles.toggleBtnUnavailable,
+                    ]}
+                    onPress={() => toggleItemState(idx, 'unavailable')}
+                  >
+                    <Text style={[
+                      styles.toggleText,
+                      itemStates[idx] === 'unavailable' && styles.toggleTextActive,
+                    ]}>
+                      {t('storeOrder.unavailable').toUpperCase()}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
           </View>
@@ -238,16 +306,25 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
     // ── Pending: store reviews + marks ready ────────────────
     if (status === 'pending') {
       return (
-        <TouchableOpacity
-          style={[styles.primaryBtn, submitting && styles.primaryBtnDisabled]}
-          onPress={handleMarkReady}
-          disabled={submitting}
-        >
-          {submitting
-            ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.primaryBtnText}>{t('storeOrder.readyForDelivery')}</Text>
-          }
-        </TouchableOpacity>
+        <View style={{ gap: 10 }}>
+          <TouchableOpacity
+            style={[styles.primaryBtn, submitting && styles.primaryBtnDisabled]}
+            onPress={handleMarkReady}
+            disabled={submitting}
+          >
+            {submitting
+              ? <ActivityIndicator color={colors.onDark} />
+              : <Text style={styles.primaryBtnText}>{t('storeOrder.readyForDelivery').toUpperCase()}</Text>
+            }
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.cancelOrderBtn, submitting && styles.primaryBtnDisabled]}
+            onPress={handleCancelOrder}
+            disabled={submitting}
+          >
+            <Text style={styles.cancelOrderBtnText}>{t('storeOrder.cancelOrder').toUpperCase()}</Text>
+          </TouchableOpacity>
+        </View>
       );
     }
 
@@ -256,31 +333,53 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
       if (dispatching) {
         return (
           <View style={styles.statusInfoBox}>
-            <ActivityIndicator color="#7c3aed" style={{ marginBottom: 8 }} />
-            <Text style={styles.statusInfoText}>{t('storeOrder.dispatching')}</Text>
+            <ActivityIndicator color={colors.primary} style={{ marginBottom: 8 }} />
+            <Text style={styles.statusInfoText}>{t('storeOrder.dispatching').toUpperCase()}</Text>
           </View>
         );
       }
 
       return (
         <View>
-          {/* Preferred drivers */}
+          {/* Preferred drivers — all shown, availability reflected */}
           {preferredDrivers.length > 0 && (
             <View style={styles.card}>
-              <Text style={styles.cardLabel}>{t('storeOrder.preferredDrivers')}</Text>
-              {preferredDrivers.map(driver => (
-                <TouchableOpacity
-                  key={driver.id}
-                  style={styles.driverRow}
-                  onPress={() => handleAssignDriver(driver)}
-                  disabled={submitting}
-                >
-                  <Text style={styles.driverName}>{driver.name}</Text>
-                  <View style={styles.assignBadge}>
-                    <Text style={styles.assignBadgeText}>{t('storeOrder.assignDriver')}</Text>
+              <Text style={styles.cardLabel}>{t('storeOrder.preferredDrivers').toUpperCase()}</Text>
+              {preferredDrivers.map(driver => {
+                const avail     = driver.availability ?? 'offline';
+                const canAssign = avail === 'available' && !submitting;
+                const availStyle = avail === 'available'
+                  ? styles.availBadgeGreen
+                  : avail === 'on_job'
+                  ? styles.availBadgeAmber
+                  : styles.availBadgeGray;
+                const availLabel = avail === 'available'
+                  ? t('storeOrder.driverAvailable')
+                  : avail === 'on_job'
+                  ? t('storeOrder.driverOnJob')
+                  : t('storeOrder.driverOffline');
+
+                return (
+                  <View
+                    key={driver.id}
+                    style={[styles.driverRow, !canAssign && styles.driverRowDimmed]}
+                  >
+                    <View style={styles.driverLeft}>
+                      <Text style={styles.driverName}>{driver.driver_name}</Text>
+                      <View style={[styles.availBadge, availStyle]}>
+                        <Text style={styles.availBadgeText}>{availLabel.toUpperCase()}</Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.assignBadge, !canAssign && styles.assignBadgeDimmed]}
+                      onPress={() => canAssign && handleAssignDriver(driver)}
+                      disabled={!canAssign}
+                    >
+                      <Text style={styles.assignBadgeText}>{t('storeOrder.assignDriver').toUpperCase()}</Text>
+                    </TouchableOpacity>
                   </View>
-                </TouchableOpacity>
-              ))}
+                );
+              })}
             </View>
           )}
 
@@ -297,7 +396,16 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
             onPress={handlePostToPool}
             disabled={submitting}
           >
-            <Text style={styles.primaryBtnText}>{t('storeOrder.postToPool')}</Text>
+            <Text style={styles.primaryBtnText}>{t('storeOrder.postToPool').toUpperCase()}</Text>
+          </TouchableOpacity>
+
+          {/* Cancel — available until driver picks up */}
+          <TouchableOpacity
+            style={[styles.cancelOrderBtn, submitting && styles.primaryBtnDisabled]}
+            onPress={handleCancelOrder}
+            disabled={submitting}
+          >
+            <Text style={styles.cancelOrderBtnText}>{t('storeOrder.cancelOrder').toUpperCase()}</Text>
           </TouchableOpacity>
         </View>
       );
@@ -306,10 +414,8 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
     // ── Accepted + driver assigned: en route ─────────────────
     if (status === 'accepted' && driver_id) {
       return (
-        <View style={[styles.statusInfoBox, { backgroundColor: '#dbeafe' }]}>
-          <Text style={[styles.statusInfoText, { color: '#1d4ed8' }]}>
-            {t('storeOrder.driverEnRoute')}
-          </Text>
+        <View style={styles.statusInfoBox}>
+          <Text style={styles.statusInfoText}>{t('storeOrder.driverEnRoute').toUpperCase()}</Text>
         </View>
       );
     }
@@ -317,10 +423,8 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
     // ── Out for delivery: waiting ─────────────────────────────
     if (status === 'out_for_delivery') {
       return (
-        <View style={[styles.statusInfoBox, { backgroundColor: '#ede9fe' }]}>
-          <Text style={[styles.statusInfoText, { color: '#6d28d9' }]}>
-            {t('storeOrder.awaitingDelivery')}
-          </Text>
+        <View style={styles.statusInfoBox}>
+          <Text style={styles.statusInfoText}>{t('storeOrder.awaitingDelivery').toUpperCase()}</Text>
         </View>
       );
     }
@@ -329,22 +433,22 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
     if (status === 'delivered') {
       if (store_paid) {
         return (
-          <View style={[styles.statusInfoBox, { backgroundColor: '#dcfce7' }]}>
-            <Text style={[styles.statusInfoText, { color: '#15803d' }]}>
-              {t('storeOrder.paid')}
+          <View style={[styles.statusInfoBox, { borderLeftColor: colors.primary }]}>
+            <Text style={[styles.statusInfoText, { color: colors.primary }]}>
+              {t('storeOrder.paid').toUpperCase()}
             </Text>
           </View>
         );
       }
       return (
         <TouchableOpacity
-          style={[styles.primaryBtn, styles.primaryBtnGreen, submitting && styles.primaryBtnDisabled]}
+          style={[styles.primaryBtn, submitting && styles.primaryBtnDisabled]}
           onPress={handleMarkPaid}
           disabled={submitting}
         >
           {submitting
-            ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.primaryBtnText}>{t('storeOrder.markPaid')}</Text>
+            ? <ActivityIndicator color={colors.onDark} />
+            : <Text style={styles.primaryBtnText}>{t('storeOrder.markPaid').toUpperCase()}</Text>
           }
         </TouchableOpacity>
       );
@@ -357,11 +461,21 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <View style={styles.root}>
+        <SafeAreaView style={styles.hero} edges={['top']}>
+          <View style={styles.heroHeader}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.heroBackBtn}>
+              <Text style={styles.heroBackText}>{t('shared.back').toUpperCase()}</Text>
+            </TouchableOpacity>
+            <Text style={styles.heroTitle}>{t('storeOrder.title').toUpperCase()}</Text>
+            <View style={{ width: 60 }} />
+          </View>
+        </SafeAreaView>
+        <SlashDivider />
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#16a34a" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -370,33 +484,36 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
   const cfg = STATUS_CONFIG[job?.status] ?? STATUS_CONFIG.pending;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.root}>
 
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>{t('shared.back')}</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('storeOrder.title')}</Text>
-        <View style={[styles.headerBadge, { backgroundColor: cfg.bg }]}>
-          <Text style={[styles.headerBadgeText, { color: cfg.color }]}>
-            {t('storeHome.status.' + (job?.status ?? 'pending'))}
+      {/* ── Hero panel ── */}
+      <SafeAreaView style={styles.hero} edges={['top']}>
+        <View style={styles.heroHeader}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.heroBackBtn}>
+            <Text style={styles.heroBackText}>{t('shared.back').toUpperCase()}</Text>
+          </TouchableOpacity>
+          <Text style={styles.heroTitle}>{t('storeOrder.title').toUpperCase()}</Text>
+          <Text style={[styles.heroBadge, { color: cfg.color }]}>
+            {t('storeHome.status.' + (job?.status ?? 'pending')).toUpperCase()}
           </Text>
         </View>
-      </View>
+      </SafeAreaView>
+
+      {/* ── Red slash divider ── */}
+      <SlashDivider />
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
 
         {/* Client info */}
         <View style={styles.card}>
           <View style={styles.clientRow}>
-            <Text style={styles.cardLabel}>{t('storeOrder.clientName')}</Text>
+            <Text style={styles.cardLabel}>{t('storeOrder.clientName').toUpperCase()}</Text>
             <Text style={styles.clientName}>{client?.name ?? '—'}</Text>
           </View>
           {client?.phone && (
             <>
               <View style={styles.clientRow}>
-                <Text style={styles.cardLabel}>{t('storeOrder.phone')}</Text>
+                <Text style={styles.cardLabel}>{t('storeOrder.phone').toUpperCase()}</Text>
                 <Text style={styles.clientPhone}>{client.phone}</Text>
               </View>
               {job?.status === 'pending' && (
@@ -414,17 +531,28 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
         {/* Notes */}
         {!!job?.order_notes && (
           <View style={styles.card}>
-            <Text style={styles.cardLabel}>{t('storeOrder.orderNotes')}</Text>
+            <Text style={styles.cardLabel}>{t('storeOrder.orderNotes').toUpperCase()}</Text>
             <Text style={styles.notesText}>{job.order_notes}</Text>
           </View>
         )}
 
-        {/* Order total */}
+        {/* Order total — editable by store when pending, read-only after */}
         <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>{t('storeOrder.orderTotal')}</Text>
-          <Text style={styles.totalValue}>
-            ${job?.order_total != null ? Number(job.order_total).toFixed(2) : '—'}
-          </Text>
+          <Text style={styles.totalLabel}>{t('storeOrder.orderTotal').toUpperCase()}</Text>
+          {job?.status === 'pending' ? (
+            <TextInput
+              style={styles.totalInput}
+              value={orderTotal}
+              onChangeText={setOrderTotal}
+              keyboardType="decimal-pad"
+              placeholder="0.00"
+              placeholderTextColor={colors.textSecondary}
+            />
+          ) : (
+            <Text style={styles.totalValue}>
+              ${job?.order_total != null ? Number(job.order_total).toFixed(2) : '—'}
+            </Text>
+          )}
         </View>
 
         {/* Action area */}
@@ -433,35 +561,30 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
         </View>
 
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#fff' },
-  center:   { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  root:  { flex: 1, backgroundColor: colors.background },
+  center:{ flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  // Header
-  header: {
+  // ── Hero panel ──
+  hero: { backgroundColor: colors.hero, paddingBottom: 14 },
+  heroHeader: {
     flexDirection:     'row',
     alignItems:        'center',
     paddingHorizontal: 16,
-    paddingVertical:   12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    paddingTop:        10,
+    paddingBottom:     4,
     gap:               8,
   },
-  backBtn:         { paddingRight: 4 },
-  backText:        { fontSize: 14, color: '#16a34a', fontWeight: '600' },
-  headerTitle:     { flex: 1, fontSize: 16, fontWeight: '700', color: '#1a1a1a' },
-  headerBadge: {
-    paddingHorizontal: 10,
-    paddingVertical:    4,
-    borderRadius:      20,
-  },
-  headerBadgeText: { fontSize: 12, fontWeight: '600' },
+  heroBackBtn:  { width: 60 },
+  heroBackText: { fontSize: 11, fontWeight: '500', color: colors.mutedOnDark, letterSpacing: 1.5 },
+  heroTitle:    { flex: 1, fontSize: 14, fontWeight: '500', color: colors.onDark, letterSpacing: 2 },
+  heroBadge:    { fontSize: 10, fontWeight: '500', letterSpacing: 1.5, color: colors.mutedOnDark },
 
   // Scroll
   scroll:        { flex: 1 },
@@ -469,20 +592,20 @@ const styles = StyleSheet.create({
 
   // Card
   card: {
-    backgroundColor: '#f9fafb',
-    borderRadius:    12,
+    backgroundColor: colors.surface,
+    borderRadius:    radius.md,
     padding:         14,
     marginBottom:    12,
     borderWidth:     1,
-    borderColor:     '#e5e7eb',
+    borderColor:     colors.border,
   },
   cardLabel: {
-    fontSize:     12,
-    fontWeight:   '600',
-    color:        '#6b7280',
+    fontSize:      11,
+    fontWeight:    '500',
+    color:         colors.textSecondary,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 6,
+    letterSpacing:  1.5,
+    marginBottom:  6,
   },
 
   // Client info
@@ -492,9 +615,9 @@ const styles = StyleSheet.create({
     alignItems:     'center',
     marginBottom:   4,
   },
-  clientName:  { fontSize: 15, fontWeight: '600', color: '#1a1a1a' },
-  clientPhone: { fontSize: 15, color: '#374151' },
-  callHint:    { fontSize: 13, color: '#6b7280', marginTop: 8, lineHeight: 18 },
+  clientName:  { fontSize: 15, fontWeight: '500', color: colors.textPrimary },
+  clientPhone: { fontSize: 15, color: colors.textPrimary },
+  callHint:    { fontSize: 13, color: colors.textSecondary, marginTop: 8, lineHeight: 18 },
 
   // Items
   itemRow: { marginBottom: 10 },
@@ -504,25 +627,31 @@ const styles = StyleSheet.create({
     alignItems:     'center',
     marginBottom:   6,
   },
-  itemName:  { fontSize: 14, fontWeight: '500', color: '#1a1a1a', flex: 1 },
-  itemQty:   { fontSize: 14, color: '#6b7280', fontWeight: '400' },
-  itemPrice: { fontSize: 14, fontWeight: '600', color: '#1a1a1a' },
+  itemName:  { fontSize: 14, fontWeight: '500', color: colors.textPrimary, flex: 1 },
+  itemQty:   { fontSize: 14, color: colors.textSecondary, fontWeight: '400' },
+  itemPrice: { fontSize: 14, fontWeight: '500', color: colors.primary },
 
   // Item state toggles
   itemToggles: { flexDirection: 'row', gap: 8 },
   toggleBtn: {
-    paddingHorizontal: 12,
-    paddingVertical:    5,
-    borderRadius:      8,
-    backgroundColor:   '#e5e7eb',
+    paddingHorizontal: 10,
+    paddingVertical:    4,
+    borderRadius:      radius.sm,
+    backgroundColor:   colors.border,
   },
-  toggleBtnPulled:      { backgroundColor: '#d1fae5' },
-  toggleBtnUnavailable: { backgroundColor: '#fee2e2' },
-  toggleText:           { fontSize: 12, fontWeight: '600', color: '#6b7280' },
-  toggleTextActive:     { color: '#1a1a1a' },
+  toggleBtnPulled:      { backgroundColor: colors.primary },
+  toggleBtnUnavailable: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.primary },
+  toggleText: {
+    fontSize:      10,
+    fontWeight:    '500',
+    color:         colors.textSecondary,
+    letterSpacing:  1,
+    textTransform: 'uppercase',
+  },
+  toggleTextActive: { color: colors.onDark },
 
   // Notes
-  notesText: { fontSize: 14, color: '#374151', lineHeight: 20 },
+  notesText: { fontSize: 14, color: colors.textPrimary, lineHeight: 20 },
 
   // Total row
   totalRow: {
@@ -531,70 +660,163 @@ const styles = StyleSheet.create({
     alignItems:     'center',
     paddingVertical: 14,
     borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
+    borderTopColor: colors.border,
     marginTop:       4,
     marginBottom:    16,
   },
-  totalLabel: { fontSize: 15, fontWeight: '600', color: '#374151' },
-  totalValue: { fontSize: 18, fontWeight: '700', color: '#1a1a1a' },
+  totalLabel: {
+    fontSize:      11,
+    fontWeight:    '500',
+    color:         colors.textSecondary,
+    letterSpacing:  1.5,
+    textTransform: 'uppercase',
+  },
+  totalValue: { fontSize: 18, fontWeight: '500', color: colors.primary },
+  totalInput: {
+    fontSize:          18,
+    fontWeight:        '500',
+    color:             colors.primary,
+    borderBottomWidth: 2,
+    borderBottomColor: colors.primary,
+    paddingVertical:    2,
+    paddingHorizontal:  4,
+    minWidth:           80,
+    textAlign:         'right',
+  },
 
   // Action area
   actionArea: { marginTop: 4 },
 
   // Info/status boxes
   statusInfoBox: {
-    backgroundColor: '#f3f4f6',
-    borderRadius:    12,
+    backgroundColor: colors.surface,
+    borderRadius:    radius.md,
+    borderWidth:     1,
+    borderColor:     colors.border,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
     padding:         16,
     alignItems:      'center',
   },
   statusInfoText: {
-    fontSize:   14,
-    fontWeight: '600',
-    color:      '#374151',
-    textAlign:  'center',
+    fontSize:      11,
+    fontWeight:    '500',
+    color:         colors.textSecondary,
+    textAlign:     'center',
+    letterSpacing:  1.5,
+    textTransform: 'uppercase',
   },
   infoBox: {
-    backgroundColor: '#f9fafb',
-    borderRadius:    10,
+    backgroundColor: colors.surface,
+    borderRadius:    radius.md,
     padding:         14,
     marginBottom:    12,
     borderWidth:     1,
-    borderColor:     '#e5e7eb',
+    borderColor:     colors.border,
   },
-  infoBoxText: { fontSize: 13, color: '#6b7280', textAlign: 'center' },
+  infoBoxText: { fontSize: 13, color: colors.textSecondary, textAlign: 'center' },
 
   // Preferred driver row
   driverRow: {
-    flexDirection:  'row',
-    justifyContent: 'space-between',
-    alignItems:     'center',
-    paddingVertical: 10,
+    flexDirection:     'row',
+    justifyContent:    'space-between',
+    alignItems:        'center',
+    paddingVertical:   12,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: colors.border,
   },
-  driverName: { fontSize: 14, fontWeight: '500', color: '#1a1a1a' },
-  assignBadge: {
-    backgroundColor:   '#dbeafe',
-    paddingHorizontal: 12,
-    paddingVertical:    5,
-    borderRadius:      8,
-  },
-  assignBadgeText: { fontSize: 13, fontWeight: '600', color: '#1d4ed8' },
+  driverRowDimmed: { opacity: 0.45 },
+  driverLeft:  { flex: 1, marginRight: 10, gap: 4 },
+  driverName:  { fontSize: 14, fontWeight: '500', color: colors.textPrimary },
 
-  // Primary action button
+  // Availability badges
+  availBadge: {
+    alignSelf:         'flex-start',
+    paddingHorizontal: 7,
+    paddingVertical:    2,
+    borderRadius:      radius.sm,
+  },
+  availBadgeGreen: { backgroundColor: '#dcfce7' },
+  availBadgeAmber: { backgroundColor: '#fef3c7' },
+  availBadgeGray:  { backgroundColor: colors.surface },
+  availBadgeText: {
+    fontSize:      9,
+    fontWeight:    '500',
+    letterSpacing:  1.2,
+    textTransform: 'uppercase',
+    color:         colors.textPrimary,
+  },
+
+  // Assign button
+  assignBadge: {
+    backgroundColor:   colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical:    6,
+    borderRadius:      radius.sm,
+  },
+  assignBadgeDimmed: { backgroundColor: colors.border },
+  assignBadgeText: {
+    fontSize:      10,
+    fontWeight:    '500',
+    color:         colors.onDark,
+    letterSpacing:  1.5,
+    textTransform: 'uppercase',
+  },
+
+  // Other item price row
+  otherPriceRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    marginBottom:   8,
+    gap:            8,
+  },
+  otherPriceLabel: {
+    fontSize:      10,
+    color:         colors.textSecondary,
+    fontWeight:    '500',
+    letterSpacing:  1.5,
+    textTransform: 'uppercase',
+  },
+  otherPriceInput: {
+    flex:              1,
+    borderWidth:       1,
+    borderColor:       colors.border,
+    borderRadius:      radius.sm,
+    paddingHorizontal: 10,
+    paddingVertical:    6,
+    fontSize:          14,
+    color:             colors.textPrimary,
+    backgroundColor:   colors.background,
+  },
+
+  // Cancel order button
+  cancelOrderBtn: {
+    borderWidth:     1.5,
+    borderColor:    colors.primary,
+    borderRadius:   radius.md,
+    paddingVertical: 14,
+    alignItems:     'center',
+  },
+  cancelOrderBtnText: {
+    color:         colors.primary,
+    fontSize:      13,
+    fontWeight:    '500',
+    letterSpacing:  2,
+    textTransform: 'uppercase',
+  },
+
   primaryBtn: {
-    backgroundColor: '#16a34a',
-    borderRadius:    12,
+    backgroundColor: colors.primary,
+    borderRadius:    radius.md,
     paddingVertical: 15,
     alignItems:      'center',
     marginTop:       8,
   },
-  primaryBtnGreen:    { backgroundColor: '#15803d' },
   primaryBtnDisabled: { opacity: 0.6 },
   primaryBtnText: {
-    color:      '#fff',
-    fontSize:   15,
-    fontWeight: '700',
+    color:         colors.onDark,
+    fontSize:      13,
+    fontWeight:    '500',
+    letterSpacing:  2,
   },
 });
