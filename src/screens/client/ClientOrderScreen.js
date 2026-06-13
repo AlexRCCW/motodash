@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
   TouchableOpacity, TextInput, Alert,
-  ActivityIndicator, Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
@@ -12,6 +12,7 @@ import { supabase } from '../../config/supabase';
 import { markDeliveryCompleteClient } from '../../services/jobService';
 import { colors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
+import { showInterstitial } from '../../services/adService';
 
 const STATUS_CONFIG = {
   pending:          { color: colors.primary,      bg: colors.surface },
@@ -30,10 +31,8 @@ export default function ClientOrderScreen({ navigation, route }) {
   const [placing,     setPlacing]     = useState(false);
   const [job,         setJob]         = useState(resumedJob || null);
   const [storeName,   setStoreName]   = useState(store?.store_name ?? '');
-  const [showAd,           setShowAd]           = useState(false);
-  const [completing,       setCompleting]       = useState(false);
-  const [pendingCompletion,setPendingCompletion] = useState(false); // true = ad is for mark-received
-  const [adShownWaiting,   setAdShownWaiting]   = useState(false);
+  const [completing,     setCompleting]     = useState(false);
+  const [adShownWaiting, setAdShownWaiting] = useState(false);
 
   const isPlaced = !!job;
 
@@ -64,7 +63,7 @@ export default function ClientOrderScreen({ navigation, route }) {
         setJob(payload.new);
         if (payload.new.status === 'out_for_delivery' && !adShownWaiting) {
           setAdShownWaiting(true);
-          setShowAd(true);
+          showInterstitial();
         }
       })
       .subscribe();
@@ -73,10 +72,10 @@ export default function ClientOrderScreen({ navigation, route }) {
 
   // ── Order flow ───────────────────────────────────────────────
 
-  // Tapping "Place order" shows an ad first; actual insert happens in handleAdComplete
-  function handlePlaceOrder() {
+  async function handlePlaceOrder() {
     if (!store || !clientLocation || !orderItems?.length) return;
-    setShowAd(true);
+    await showInterstitial();
+    await doPlaceOrder();
   }
 
   async function doPlaceOrder() {
@@ -109,30 +108,13 @@ export default function ClientOrderScreen({ navigation, route }) {
     await AsyncStorage.setItem('open_job_id', data.id);
   }
 
-  function handleMarkReceived() {
-    setPendingCompletion(true);  // flag: this ad leads to marking received
-    setShowAd(true);
-  }
-
-  async function handleAdComplete() {
-    setShowAd(false);
-
-    // Pre-order ad → place the order
-    if (!job) {
-      await doPlaceOrder();
-      return;
-    }
-
-    // Passive waiting ad (triggered by Realtime when status → out_for_delivery)
-    if (!pendingCompletion) return;
-
-    // Completion ad — customer intentionally tapped "Mark received"
-    setPendingCompletion(false);
+  async function handleMarkReceived() {
     setCompleting(true);
+    await showInterstitial();
     const { error } = await markDeliveryCompleteClient(job.id);
     if (error) {
       Alert.alert(t('shared.error'), t('clientOrder.completeOrderError'),
-        [{ text: t('shared.retry'), onPress: () => handleAdComplete() }]
+        [{ text: t('shared.retry'), onPress: () => handleMarkReceived() }]
       );
       setCompleting(false);
       return;
@@ -146,17 +128,6 @@ export default function ClientOrderScreen({ navigation, route }) {
 
   return (
     <View style={styles.root}>
-
-      {/* Ad modal */}
-      <Modal visible={showAd} animationType="slide" transparent={false}>
-        <View style={styles.adContainer}>
-          <Text style={styles.adTitle}>{t('shared.adTitle').toUpperCase()}</Text>
-          <Text style={styles.adSubtitle}>{t('shared.adSubtitle')}</Text>
-          <TouchableOpacity style={styles.adButton} onPress={handleAdComplete}>
-            <Text style={styles.adButtonText}>{t('shared.continue').toUpperCase()}</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
 
       {/* ── Hero panel ── */}
       <SafeAreaView style={styles.hero} edges={['top']}>

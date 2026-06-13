@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, Modal, Image,
+  Alert, ActivityIndicator, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
@@ -16,6 +16,7 @@ import {
 import { registerForPushNotifications, setupNotificationListeners } from '../../services/notificationService';
 import { colors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
+import { showPlayable } from '../../services/adService';
 
 const OFFER_TIMEOUT = 15;
 
@@ -25,8 +26,6 @@ export default function DriverHomeScreen({ navigation }) {
   const [location,   setLocation]   = useState(null);
   const [jobOffer,   setJobOffer]   = useState(null);
   const [offerTimer, setOfferTimer] = useState(0);
-  const [showAd,     setShowAd]     = useState(false);
-
   const timerRef = useRef(null);
 
   useEffect(() => {
@@ -146,12 +145,8 @@ export default function DriverHomeScreen({ navigation }) {
       return;
     }
     setLocation(loc);
-    setShowAd(true);   // playable ad before going active
-  }
-
-  async function handleAdComplete() {
-    setShowAd(false);
-    const { error } = await setDriverReady(account.id, location.lat, location.lng);
+    await showPlayable();
+    const { error } = await setDriverReady(account.id, loc.lat, loc.lng);
     if (error) { Alert.alert(t('shared.error'), t('driverHome.statusUpdateError')); setStatus('idle'); return; }
     setStatus('waiting');
   }
@@ -227,17 +222,6 @@ export default function DriverHomeScreen({ navigation }) {
 
   return (
     <View style={s.root}>
-
-      {/* Ad modal — replace with real ad SDK */}
-      <Modal visible={showAd} animationType="slide" transparent={false}>
-        <View style={s.adContainer}>
-          <Text style={s.adTitle}>{t('shared.adTitle').toUpperCase()}</Text>
-          <Text style={s.adSub}>{t('shared.adPlayable')}</Text>
-          <TouchableOpacity style={s.adBtn} onPress={handleAdComplete}>
-            <Text style={s.adBtnText}>{t('shared.adComplete').toUpperCase()}</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
 
       {/* ── Hero panel ── */}
       <SafeAreaView style={s.hero} edges={['top']}>

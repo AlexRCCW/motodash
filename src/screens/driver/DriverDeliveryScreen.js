@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Alert, Modal, ScrollView
+  Alert, ScrollView
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
@@ -11,6 +11,7 @@ import { markDeliveryCompleteDriver } from '../../services/jobService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
+import { showInterstitial } from '../../services/adService';
 
 // 300 ft — store pickup/return (GPS accuracy on mobile is rarely < 6m)
 const STORE_GEOFENCE_METERS  = 91.44;
@@ -29,7 +30,6 @@ export default function DriverDeliveryScreen({ navigation, route }) {
   const [phase, setPhase]                   = useState('to_store');
   const [driverLocation, setDriverLocation] = useState(null);
   const [canAdvance, setCanAdvance]         = useState(false);
-  const [showAd, setShowAd]                 = useState(false);
   const [completing, setCompleting]         = useState(false);
 
   const stopWatchingRef = useRef(null);
@@ -123,7 +123,7 @@ export default function DriverDeliveryScreen({ navigation, route }) {
     }
   }
 
-  function handleAdvance() {
+  async function handleAdvance() {
     if (phase === 'to_store') {
       setPhase('to_client');
       setCanAdvance(false);
@@ -139,30 +139,24 @@ export default function DriverDeliveryScreen({ navigation, route }) {
       setCanAdvance(false);
     } else if (phase === 'return_store') {
       if (stopWatchingRef.current) stopWatchingRef.current();
-      setShowAd(true);
+      setCompleting(true);
+      await showInterstitial();
+
+      const { error } = await markDeliveryCompleteDriver(job.id);
+
+      if (error) {
+        Alert.alert(
+          t('shared.error'),
+          t('driverDelivery.couldNotComplete'),
+          [{ text: t('shared.retry'), onPress: () => handleAdvance() }]
+        );
+        setCompleting(false);
+        return;
+      }
+
+      await AsyncStorage.multiRemove(['open_job', 'open_job_type', 'open_job_id', 'open_job_phase']);
+      navigation.reset({ index: 0, routes: [{ name: 'DriverHome' }] });
     }
-  }
-
-  async function handleAdComplete() {
-    setShowAd(false);
-    setCompleting(true);
-
-    const { error } = await markDeliveryCompleteDriver(job.id);
-
-    if (error) {
-      Alert.alert(
-        t('shared.error'),
-        t('driverDelivery.couldNotComplete'),
-        [{ text: t('shared.retry'), onPress: () => handleAdComplete() }]
-      );
-      setCompleting(false);
-      return;
-    }
-
-    await AsyncStorage.multiRemove(['open_job', 'open_job_type', 'open_job_id', 'open_job_phase']);
-    // ready_for_rides stays true — DriverHome restores waiting state automatically.
-    // Driver can tap GO OFFLINE if they want a break.
-    navigation.reset({ index: 0, routes: [{ name: 'DriverHome' }] });
   }
 
   if (!job) {
@@ -177,17 +171,6 @@ export default function DriverDeliveryScreen({ navigation, route }) {
 
   return (
     <View style={styles.container}>
-
-      {/* Ad modal */}
-      <Modal visible={showAd} animationType="slide" transparent={false}>
-        <View style={styles.adContainer}>
-          <Text style={styles.adTitle}>{t('shared.adTitle').toUpperCase()}</Text>
-          <Text style={styles.adSubtitle}>{t('shared.adSubtitle')}</Text>
-          <TouchableOpacity style={styles.adButton} onPress={handleAdComplete}>
-            <Text style={styles.adButtonText}>{t('shared.adComplete').toUpperCase()}</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
 
       {/* ── Hero panel ── */}
       <SafeAreaView style={styles.hero} edges={['top']}>

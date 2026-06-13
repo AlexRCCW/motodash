@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Alert, Modal
+  Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
@@ -11,6 +11,7 @@ import { markRideCompleteDriver } from '../../services/jobService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
+import { showInterstitial } from '../../services/adService';
 
 // 300 ft — matches real-world GPS accuracy on mobile devices
 const CLIENT_GEOFENCE_METERS = 91.44;
@@ -21,7 +22,6 @@ export default function DriverRideScreen({ navigation, route }) {
 
   const [driverLocation, setDriverLocation] = useState(null);
   const [canComplete, setCanComplete]       = useState(false);
-  const [showAd, setShowAd]                 = useState(false);
   const [completing, setCompleting]         = useState(false);
 
   const stopWatchingRef = useRef(null);
@@ -52,32 +52,24 @@ export default function DriverRideScreen({ navigation, route }) {
     stopWatchingRef.current = stop;
   }
 
-  function handleMarkComplete() {
-    // Stop watching location — no need to keep polling
+  async function handleMarkComplete() {
     if (stopWatchingRef.current) stopWatchingRef.current();
-    setShowAd(true);
-  }
-
-  async function handleAdComplete() {
-    setShowAd(false);
     setCompleting(true);
+    await showInterstitial();
 
     const { error } = await markRideCompleteDriver(job.id);
 
     if (error) {
-      // If call fails, keep open_job true so we can retry on relaunch
       Alert.alert(
         t('shared.error'),
         t('driverRide.couldNotComplete'),
-        [{ text: t('shared.retry'), onPress: () => handleAdComplete() }]
+        [{ text: t('shared.retry'), onPress: () => handleMarkComplete() }]
       );
       setCompleting(false);
       return;
     }
 
-    // Clear local storage only after server confirms
     await AsyncStorage.multiRemove(['open_job', 'open_job_type', 'open_job_id']);
-    // ready_for_rides stays true — DriverHome restores waiting state automatically.
     navigation.reset({
       index: 0,
       routes: [{ name: 'DriverHome' }],
@@ -94,21 +86,6 @@ export default function DriverRideScreen({ navigation, route }) {
 
   return (
     <View style={styles.container}>
-
-      {/* Ad modal — replace with real ad SDK */}
-      <Modal visible={showAd} animationType="slide" transparent={false}>
-        <View style={styles.adContainer}>
-          <Text style={styles.adTitle}>{t('shared.adTitle').toUpperCase()}</Text>
-          <Text style={styles.adSubtitle}>{t('shared.adSubtitle')}</Text>
-          <Text style={styles.adNote}>
-            Replace with your ad SDK.{'\n'}
-            Call handleAdComplete() when the ad finishes.
-          </Text>
-          <TouchableOpacity style={styles.adButton} onPress={handleAdComplete}>
-            <Text style={styles.adButtonText}>{t('shared.adComplete').toUpperCase()}</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
 
       {/* ── Hero panel ── */}
       <SafeAreaView style={styles.hero} edges={['top']}>

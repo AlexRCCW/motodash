@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
-  TouchableOpacity, Alert, Modal, ActivityIndicator
+  TouchableOpacity, Alert, ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../config/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { colors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
+import { showRewarded } from '../../services/adService';
 
 const AWARD_KEYS = [
   'rides_1', 'rides_10', 'rides_100', 'rides_1000',
@@ -20,7 +21,6 @@ export default function DriverStatsScreen({ navigation }) {
   const [stats, setStats]             = useState(null);
   const [awards, setAwards]           = useState([]);
   const [loading, setLoading]         = useState(true);
-  const [showRewardedAd, setShowRewardedAd] = useState(false);
   const [rewardedLoading, setRewardedLoading] = useState(false);
 
   useEffect(() => {
@@ -60,9 +60,9 @@ export default function DriverStatsScreen({ navigation }) {
     return daysUntilMonday;
   }
 
-  async function handleRewardedAdComplete() {
-    setShowRewardedAd(false);
+  async function handleBoostPress() {
     setRewardedLoading(true);
+    await showRewarded();
 
     const today = new Date().toISOString().split('T')[0];
     const monday = (() => {
@@ -112,21 +112,6 @@ export default function DriverStatsScreen({ navigation }) {
   return (
     <View style={styles.root}>
 
-      {/* Rewarded ad modal */}
-      <Modal visible={showRewardedAd} animationType="slide" transparent={false}>
-        <View style={styles.adContainer}>
-          <Text style={styles.adTitle}>{t('driverStats.watchAd').toUpperCase()}</Text>
-          <Text style={styles.adSubtitle}>{t('shared.adRewarded')}</Text>
-          <Text style={styles.adNote}>
-            Replace with your rewarded ad SDK.{'\n'}
-            Call handleRewardedAdComplete() when the ad finishes.
-          </Text>
-          <TouchableOpacity style={styles.adButton} onPress={handleRewardedAdComplete}>
-            <Text style={styles.adButtonText}>{t('shared.adComplete').toUpperCase()}</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
-
       {/* ── Hero panel ── */}
       <SafeAreaView style={styles.hero} edges={['top']}>
         <View style={styles.heroHeader}>
@@ -175,7 +160,7 @@ export default function DriverStatsScreen({ navigation }) {
           ) : rewardedAvailable ? (
             <TouchableOpacity
               style={styles.boostBtn}
-              onPress={() => setShowRewardedAd(true)}
+              onPress={handleBoostPress}
               disabled={rewardedLoading}
             >
               <Text style={styles.boostBtnText}>{t('driverStats.watchAd').toUpperCase()}</Text>

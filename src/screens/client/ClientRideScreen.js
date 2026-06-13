@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Alert, ActivityIndicator, Modal
+  Alert, ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
@@ -12,6 +12,7 @@ import { createRideJob, cancelRideJob, markRideCompleteClient, getRideJob, dispa
 import { supabase } from '../../config/supabase';
 import { colors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
+import { showInterstitial } from '../../services/adService';
 
 export default function ClientRideScreen({ navigation, route }) {
   const { account } = useAuth();
@@ -20,7 +21,6 @@ export default function ClientRideScreen({ navigation, route }) {
   const [location, setLocation]     = useState(null);
   const [job, setJob]               = useState(route.params?.job || null);
   const [status, setStatus]         = useState('idle'); // idle | requesting | waiting | accepted
-  const [showAd, setShowAd]         = useState(false);
   const [completing, setCompleting] = useState(false);
   const [adShownWaiting, setAdShownWaiting] = useState(false);
 
@@ -51,11 +51,11 @@ export default function ClientRideScreen({ navigation, route }) {
     return () => supabase.removeChannel(channel);
   }, [job?.id]);
 
-  // Show waiting ad once driver is assigned
+  // Show waiting ad once per session when status becomes 'waiting'
   useEffect(() => {
     if (status === 'waiting' && !adShownWaiting) {
       setAdShownWaiting(true);
-      setShowAd(true);
+      showInterstitial();
     }
   }, [status]);
 
@@ -117,22 +117,13 @@ export default function ClientRideScreen({ navigation, route }) {
     ]);
   }
 
-  function handleMarkComplete() {
-    setShowAd(true);
-  }
-
-  async function handleAdComplete() {
-    setShowAd(false);
-
-    // If this was the waiting ad — just dismiss and continue waiting
-    if (status === 'waiting') return;
-
-    // This is the completion ad
+  async function handleMarkComplete() {
     setCompleting(true);
+    await showInterstitial();
     const { error } = await markRideCompleteClient(job.id);
     if (error) {
       Alert.alert(t('shared.error'), t('clientRide.couldNotComplete'),
-        [{ text: t('shared.retry'), onPress: () => handleAdComplete() }]
+        [{ text: t('shared.retry'), onPress: () => handleMarkComplete() }]
       );
       setCompleting(false);
       return;
@@ -143,17 +134,6 @@ export default function ClientRideScreen({ navigation, route }) {
 
   return (
     <View style={styles.container}>
-
-      {/* Ad modal */}
-      <Modal visible={showAd} animationType="slide" transparent={false}>
-        <View style={styles.adContainer}>
-          <Text style={styles.adTitle}>{t('shared.adTitle').toUpperCase()}</Text>
-          <Text style={styles.adSubtitle}>{t('shared.adSubtitle')}</Text>
-          <TouchableOpacity style={styles.adButton} onPress={handleAdComplete}>
-            <Text style={styles.adButtonText}>{t('shared.continue').toUpperCase()}</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
 
       {/* Map */}
       <MapView
