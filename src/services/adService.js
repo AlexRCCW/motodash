@@ -20,6 +20,8 @@ const ANDROID_IDS = {
   rewardedInterstitial: 'ca-app-pub-REPLACE_ANDROID_APP_ID/REPLACE_REWARDED_INTERSTITIAL_UNIT',
 };
 
+const AD_LOAD_TIMEOUT_MS = 8000;
+
 function unitId(type) {
   if (__DEV__) {
     if (type === 'interstitial')         return TestIds.INTERSTITIAL;
@@ -29,55 +31,82 @@ function unitId(type) {
   return (Platform.OS === 'ios' ? IOS_IDS : ANDROID_IDS)[type];
 }
 
-// Resolves when the ad closes (or immediately if it fails to load).
-// Never rejects — app flow must always continue.
+function testId(type) {
+  if (type === 'interstitial')         return TestIds.INTERSTITIAL;
+  if (type === 'rewarded')             return TestIds.REWARDED;
+  if (type === 'rewardedInterstitial') return TestIds.REWARDED_INTERSTITIAL;
+}
+
+// Tries to load an interstitial ad. Falls back to test ad if real one times out.
+// Resolves when ad closes, or if fallback also fails — never hangs.
 export function showInterstitial() {
   return new Promise((resolve) => {
-    const ad = InterstitialAd.createForAdRequest(unitId('interstitial'));
-    const unsubError = ad.addAdEventListener(AdEventType.ERROR, () => {
-      unsubError();
-      resolve();
-    });
-    const unsubLoad = ad.addAdEventListener(AdEventType.LOADED, () => {
-      unsubLoad();
-      const unsubClose = ad.addAdEventListener(AdEventType.CLOSED, () => {
-        unsubClose();
-        resolve();
+    let resolved = false;
+    const done = () => { if (!resolved) { resolved = true; resolve(); } };
+
+    function loadAd(id, isFallback) {
+      const ad = InterstitialAd.createForAdRequest(id);
+      const timer = setTimeout(() => {
+        if (isFallback) { done(); } else { loadAd(testId('interstitial'), true); }
+      }, AD_LOAD_TIMEOUT_MS);
+      ad.addAdEventListener(AdEventType.ERROR, () => {
+        clearTimeout(timer);
+        if (isFallback) { done(); } else { loadAd(testId('interstitial'), true); }
       });
-      ad.show();
-    });
-    ad.load();
+      ad.addAdEventListener(AdEventType.LOADED, () => {
+        clearTimeout(timer);
+        ad.addAdEventListener(AdEventType.CLOSED, done);
+        ad.show();
+      });
+      ad.load();
+    }
+
+    loadAd(unitId('interstitial'), false);
   });
 }
 
-// Rewarded video — resolves on close regardless of whether reward was earned.
+// Rewarded video — falls back to test ad if real one times out.
 export function showRewarded() {
   return new Promise((resolve) => {
-    const ad = RewardedAd.createForAdRequest(unitId('rewarded'));
-    const unsubLoad = ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
-      unsubLoad();
-      const unsubClose = ad.addAdEventListener(AdEventType.CLOSED, () => {
-        unsubClose();
-        resolve();
+    let resolved = false;
+    const done = () => { if (!resolved) { resolved = true; resolve(); } };
+
+    function loadAd(id, isFallback) {
+      const ad = RewardedAd.createForAdRequest(id);
+      const timer = setTimeout(() => {
+        if (isFallback) { done(); } else { loadAd(testId('rewarded'), true); }
+      }, AD_LOAD_TIMEOUT_MS);
+      ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
+        clearTimeout(timer);
+        ad.addAdEventListener(AdEventType.CLOSED, done);
+        ad.show();
       });
-      ad.show();
-    });
-    ad.load();
+      ad.load();
+    }
+
+    loadAd(unitId('rewarded'), false);
   });
 }
 
-// Playable (rewarded interstitial) — used for driver mark-ready.
+// Playable (rewarded interstitial) — falls back to test ad if real one times out.
 export function showPlayable() {
   return new Promise((resolve) => {
-    const ad = RewardedInterstitialAd.createForAdRequest(unitId('rewardedInterstitial'));
-    const unsubLoad = ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
-      unsubLoad();
-      const unsubClose = ad.addAdEventListener(AdEventType.CLOSED, () => {
-        unsubClose();
-        resolve();
+    let resolved = false;
+    const done = () => { if (!resolved) { resolved = true; resolve(); } };
+
+    function loadAd(id, isFallback) {
+      const ad = RewardedInterstitialAd.createForAdRequest(id);
+      const timer = setTimeout(() => {
+        if (isFallback) { done(); } else { loadAd(testId('rewardedInterstitial'), true); }
+      }, AD_LOAD_TIMEOUT_MS);
+      ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
+        clearTimeout(timer);
+        ad.addAdEventListener(AdEventType.CLOSED, done);
+        ad.show();
       });
-      ad.show();
-    });
-    ad.load();
+      ad.load();
+    }
+
+    loadAd(unitId('rewardedInterstitial'), false);
   });
 }

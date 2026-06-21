@@ -133,9 +133,7 @@ export default function StoreHomeScreen({ navigation }) {
     return (
       <View style={styles.root}>
         <SafeAreaView style={styles.hero} edges={['top']}>
-          <View style={styles.heroHeader}>
-            <Text style={styles.heroTitle}>MOTODASH</Text>
-          </View>
+          <Text style={styles.heroTitle}>MOTODASH</Text>
         </SafeAreaView>
         <SlashDivider />
         <View style={styles.center}>
@@ -152,36 +150,40 @@ export default function StoreHomeScreen({ navigation }) {
 
       {/* ── Hero panel ── */}
       <SafeAreaView style={styles.hero} edges={['top']}>
-        <View style={styles.heroHeader}>
-          <Text style={styles.heroTitle}>MOTODASH</Text>
-          <View style={styles.heroActions}>
-            <TouchableOpacity
-              style={styles.heroBtn}
-              onPress={() => navigation.navigate('StoreItems')}
-            >
-              <Text style={styles.heroBtnText}>{t('storeHome.items').toUpperCase()}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.heroBtn}
-              onPress={() => navigation.navigate('StoreDrivers')}
-            >
-              <Text style={styles.heroBtnText}>{t('storeHome.drivers').toUpperCase()}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.heroBtn}
-              onPress={() => navigation.navigate('Instructions')}
-            >
-              <Text style={styles.heroBtnText}>{t('storeHome.help').toUpperCase()}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.heroBtn, styles.heroBtnRed]}
-              onPress={handleSignOut}
-            >
-              <Text style={[styles.heroBtnText, styles.heroBtnRedText]}>
-                {t('auth.signOut').toUpperCase()}
-              </Text>
-            </TouchableOpacity>
-          </View>
+        <Text style={styles.heroTitle}>MOTODASH</Text>
+        <View style={styles.heroActions}>
+          <TouchableOpacity
+            style={styles.heroBtn}
+            onPress={() => navigation.navigate('StoreItems')}
+          >
+            <Text style={styles.heroBtnText}>{t('storeHome.items').toUpperCase()}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.heroBtn}
+            onPress={() => navigation.navigate('StoreDrivers')}
+          >
+            <Text style={styles.heroBtnText}>{t('storeHome.drivers').toUpperCase()}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.heroBtn}
+            onPress={() => navigation.navigate('StoreProfile')}
+          >
+            <Text style={styles.heroBtnText}>{(t('storeHome.profile') ?? 'PROFILE').toUpperCase()}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.heroBtn}
+            onPress={() => navigation.navigate('Instructions')}
+          >
+            <Text style={styles.heroBtnText}>{t('storeHome.help').toUpperCase()}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.heroBtn, styles.heroBtnRed]}
+            onPress={handleSignOut}
+          >
+            <Text style={[styles.heroBtnText, styles.heroBtnRedText]}>
+              {t('auth.signOut').toUpperCase()}
+            </Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
 
@@ -244,17 +246,16 @@ const styles = StyleSheet.create({
   center:{ flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   // ── Hero panel ──
-  hero: { backgroundColor: colors.hero, paddingBottom: 14 },
-  heroHeader: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'space-between',
-    paddingHorizontal: 16,
-    paddingTop:        10,
-    paddingBottom:     4,
+  hero: { backgroundColor: colors.hero, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 14 },
+  heroTitle: {
+    fontSize:      18,
+    fontWeight:    '500',
+    color:         colors.onDark,
+    letterSpacing: 2,
+    textAlign:     'center',
+    marginBottom:  10,
   },
-  heroTitle:   { fontSize: 18, fontWeight: '500', color: colors.onDark, letterSpacing: 2 },
-  heroActions: { flexDirection: 'row', gap: 6 },
+  heroActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center' },
   heroBtn: {
     paddingHorizontal: 9,
     paddingVertical:   5,

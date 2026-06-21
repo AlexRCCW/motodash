@@ -13,20 +13,23 @@ import {
   setDriverReady, setDriverNotReady, incrementDriverRefusals,
   acceptRideJob, acceptDeliveryJob,
 } from '../../services/jobService';
-import { registerForPushNotifications, setupNotificationListeners } from '../../services/notificationService';
+import { registerForPushNotifications, setupNotificationListeners, consumePendingJobOffer } from '../../services/notificationService';
 import { colors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 import { showPlayable } from '../../services/adService';
+import AdMessageOverlay from '../../components/AdMessageOverlay';
 
 const OFFER_TIMEOUT = 15;
 
 export default function DriverHomeScreen({ navigation }) {
   const { account }                 = useAuth();
-  const [status,     setStatus]     = useState('idle');  // idle | loading | waiting
-  const [location,   setLocation]   = useState(null);
-  const [jobOffer,   setJobOffer]   = useState(null);
-  const [offerTimer, setOfferTimer] = useState(0);
+  const [status,      setStatus]      = useState('idle');  // idle | loading | waiting
+  const [location,    setLocation]    = useState(null);
+  const [jobOffer,    setJobOffer]    = useState(null);
+  const [offerTimer,  setOfferTimer]  = useState(0);
+  const [showAdMsg,   setShowAdMsg]   = useState(false);
   const timerRef = useRef(null);
+  const adResolveRef = useRef(null);
 
   useEffect(() => {
     if (account?.id) {
@@ -34,6 +37,13 @@ export default function DriverHomeScreen({ navigation }) {
       checkActiveJob();
     }
     const cleanup = setupNotificationListeners({ onJobOffer: handleJobOffer });
+
+    // Handle the case where the driver tapped a job offer notification
+    // that cold-launched the app (response won't fire via the listener above).
+    consumePendingJobOffer().then(data => {
+      if (data) handleJobOffer(data);
+    });
+
     return () => {
       cleanup();
       if (timerRef.current) clearInterval(timerRef.current);
@@ -145,6 +155,7 @@ export default function DriverHomeScreen({ navigation }) {
       return;
     }
     setLocation(loc);
+    await new Promise(resolve => { adResolveRef.current = resolve; setShowAdMsg(true); });
     await showPlayable();
     const { error } = await setDriverReady(account.id, loc.lat, loc.lng);
     if (error) { Alert.alert(t('shared.error'), t('driverHome.statusUpdateError')); setStatus('idle'); return; }
@@ -155,6 +166,11 @@ export default function DriverHomeScreen({ navigation }) {
     await setDriverNotReady(account.id);
     setStatus('idle');
     setLocation(null);
+  }
+
+  async function handleSignOut() {
+    await setDriverNotReady(account.id);
+    logout();
   }
 
   // ── Hero status copy ─────────────────────────────────────────
@@ -220,34 +236,44 @@ export default function DriverHomeScreen({ navigation }) {
 
   // ── Render ───────────────────────────────────────────────────
 
+  const DRIVER_AD_MESSAGES = [
+    t('adMessage.driverReady'),
+    t('adMessage.keepFree'),
+    t('adMessage.goAdFree'),
+  ];
+
   return (
     <View style={s.root}>
+
+      <AdMessageOverlay
+        visible={showAdMsg}
+        messages={DRIVER_AD_MESSAGES}
+        onDone={() => { setShowAdMsg(false); adResolveRef.current?.(); }}
+      />
 
       {/* ── Hero panel ── */}
       <SafeAreaView style={s.hero} edges={['top']}>
 
-        {/* Header row */}
-        <View style={s.heroHeader}>
-          <Text style={s.heroTitle}>MOTODASH</Text>
-          <View style={s.heroActions}>
-            <TouchableOpacity
-              style={s.heroBtn}
-              onPress={() => navigation.navigate('DriverStats')}
-            >
-              <Text style={s.heroBtnText}>{t('driverHome.stats').toUpperCase()}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={s.heroBtn}
-              onPress={() => navigation.navigate('Instructions')}
-            >
-              <Text style={s.heroBtnText}>{t('driverHome.help').toUpperCase()}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[s.heroBtn, s.heroBtnRed]} onPress={logout}>
-              <Text style={[s.heroBtnText, s.heroBtnRedText]}>
-                {t('auth.signOut').toUpperCase()}
-              </Text>
-            </TouchableOpacity>
-          </View>
+        {/* Header rows */}
+        <Text style={s.heroTitle}>MOTODASH</Text>
+        <View style={s.heroActions}>
+          <TouchableOpacity
+            style={s.heroBtn}
+            onPress={() => navigation.navigate('DriverStats')}
+          >
+            <Text style={s.heroBtnText}>{t('driverHome.stats').toUpperCase()}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={s.heroBtn}
+            onPress={() => navigation.navigate('Instructions')}
+          >
+            <Text style={s.heroBtnText}>{t('driverHome.help').toUpperCase()}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[s.heroBtn, s.heroBtnRed]} onPress={handleSignOut}>
+            <Text style={[s.heroBtnText, s.heroBtnRedText]}>
+              {t('auth.signOut').toUpperCase()}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Status */}
@@ -319,23 +345,17 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
 
   // ── Hero panel ──
-  hero: { backgroundColor: colors.hero, paddingBottom: 14 },
+  hero: { backgroundColor: colors.hero, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 14 },
 
-  heroHeader: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    justifyContent:    'space-between',
-    paddingHorizontal: 16,
-    paddingTop:        10,
-    paddingBottom:     12,
-  },
   heroTitle: {
     fontSize:      18,
     fontWeight:    '500',
     color:         colors.onDark,
-    letterSpacing:  2,
+    letterSpacing: 2,
+    textAlign:     'center',
+    marginBottom:  10,
   },
-  heroActions: { flexDirection: 'row', gap: 6 },
+  heroActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginBottom: 6 },
   heroBtn: {
     paddingHorizontal: 9,
     paddingVertical:   5,

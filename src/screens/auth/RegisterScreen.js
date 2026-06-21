@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, ActivityIndicator, Alert, Image,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -244,6 +245,7 @@ export default function RegisterScreen({ navigation }) {
 
   if (step === 'type') {
     return (
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>{t('auth.createAccount')}</Text>
         <Text style={styles.subtitle}>{t('register.chooseType')}</Text>
@@ -270,12 +272,14 @@ export default function RegisterScreen({ navigation }) {
           <Text style={styles.linkText}>{t('auth.back')}</Text>
         </TouchableOpacity>
       </ScrollView>
+      </KeyboardAvoidingView>
     );
   }
 
   // ── STEP 2: Registration form ────────────────────────────────
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
     <ScrollView
       contentContainerStyle={styles.container}
       keyboardShouldPersistTaps="handled"
@@ -469,6 +473,7 @@ export default function RegisterScreen({ navigation }) {
         <Text style={styles.linkText}>{t('auth.back')}</Text>
       </TouchableOpacity>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

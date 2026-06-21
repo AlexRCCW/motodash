@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ActivityIndicator, Alert, ScrollView, Image,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { login } from '../../services/authService';
@@ -38,6 +39,10 @@ export default function LoginScreen({ navigation }) {
       {/* ── Red slash divider ── */}
       <SlashDivider />
 
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
@@ -87,12 +92,14 @@ export default function LoginScreen({ navigation }) {
           <Text style={styles.linkText}>{t('auth.howItWorks').toUpperCase()}</Text>
         </TouchableOpacity>
       </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
+  flex: { flex: 1 },
 
   // ── Hero panel ──
   hero: { backgroundColor: colors.hero },

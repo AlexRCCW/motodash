@@ -3,13 +3,18 @@ import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { supabase } from '../config/supabase';
 
-// Configure how notifications appear when app is in foreground
+// Job offer notifications are handled entirely in-app — suppress the banner
+// so the driver sees the offer card without an OS alert on top.
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async (notification) => {
+    const type = notification.request.content.data?.type;
+    const isJobOffer = type === 'ride_offer' || type === 'delivery_offer';
+    return {
+      shouldShowAlert: !isJobOffer,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    };
+  },
 });
 
 /**
@@ -85,4 +90,18 @@ export function setupNotificationListeners({ onJobOffer, onNotification }) {
     foregroundSub.remove();
     responseSub.remove();
   };
+}
+
+/**
+ * Check if the app was opened by tapping a job offer notification (cold launch).
+ * Call this once on DriverHomeScreen mount after listeners are set up.
+ */
+export async function consumePendingJobOffer() {
+  const response = await Notifications.getLastNotificationResponseAsync();
+  if (!response) return null;
+  const data = response.notification.request.content.data;
+  if (data?.type === 'ride_offer' || data?.type === 'delivery_offer') {
+    return data;
+  }
+  return null;
 }

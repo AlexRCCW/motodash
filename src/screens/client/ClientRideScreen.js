@@ -13,6 +13,7 @@ import { supabase } from '../../config/supabase';
 import { colors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 import { showInterstitial } from '../../services/adService';
+import AdMessageOverlay from '../../components/AdMessageOverlay';
 
 export default function ClientRideScreen({ navigation, route }) {
   const { account } = useAuth();
@@ -23,6 +24,7 @@ export default function ClientRideScreen({ navigation, route }) {
   const [status, setStatus]         = useState('idle'); // idle | requesting | waiting | accepted
   const [completing, setCompleting] = useState(false);
   const [adShownWaiting, setAdShownWaiting] = useState(false);
+  const [showAdMsg, setShowAdMsg] = useState(false);
 
   useEffect(() => {
     initLocation();
@@ -51,11 +53,11 @@ export default function ClientRideScreen({ navigation, route }) {
     return () => supabase.removeChannel(channel);
   }, [job?.id]);
 
-  // Show waiting ad once per session when status becomes 'waiting'
+  // Show overlay then ad once per session when status becomes 'waiting'
   useEffect(() => {
     if (status === 'waiting' && !adShownWaiting) {
       setAdShownWaiting(true);
-      showInterstitial();
+      setShowAdMsg(true);
     }
   }, [status]);
 
@@ -132,8 +134,20 @@ export default function ClientRideScreen({ navigation, route }) {
     navigation.replace('ClientHome');
   }
 
+  const CLIENT_AD_MESSAGES = [
+    t('adMessage.clientWaiting'),
+    t('adMessage.keepFree'),
+    t('adMessage.goAdFree'),
+  ];
+
   return (
     <View style={styles.container}>
+
+      <AdMessageOverlay
+        visible={showAdMsg}
+        messages={CLIENT_AD_MESSAGES}
+        onDone={() => { setShowAdMsg(false); showInterstitial(); }}
+      />
 
       {/* Map */}
       <MapView

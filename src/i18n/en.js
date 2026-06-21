@@ -45,6 +45,8 @@ export default {
     storeName: 'Store name',
     openingHour: 'Opening hour (e.g. 08:00)',
     closingHour: 'Closing hour (e.g. 20:00)',
+    openHour: 'Open',
+    closeHour: 'Close',
     daysOpen: 'Days open',
     storeLocation: 'Store location',
     useMyLocation: 'Use my current location',
@@ -322,10 +324,20 @@ export default {
   },
 
   // ── STORE HOME ────────────────────────────────────────────
+  storeProfile: {
+    title: 'Store profile',
+    storePhoto: 'Store photo',
+    tapToAddPhoto: 'Tap to add photo',
+    changePhoto: 'Change photo',
+    hours: 'Hours',
+    savedMsg: 'Your profile has been updated.',
+  },
+
   storeHome: {
     title: 'MotoDash',
     items: 'Items',
     drivers: 'Drivers',
+    profile: 'Profile',
     help: 'Help',
     openOrders: 'Open orders',
     noOpenOrders: 'No open orders',
@@ -447,5 +459,13 @@ export default {
     distance_dr_miami: { label: 'DR to Miami',       icon: '✈️', desc: 'Traveled 1,700 km to Miami' },
     distance_dr_nyc:   { label: 'DR to New York',    icon: '🗽', desc: 'Traveled 2,600 km to New York' },
     distance_moon:     { label: 'To the Moon',       icon: '🌙', desc: 'Traveled 384,400 km to the Moon' },
+  },
+
+  // ── AD MESSAGES ───────────────────────────────────────────
+  adMessage: {
+    clientWaiting: 'Please watch this ad while we find a driver for you.',
+    driverReady:   'Please watch this ad while we enter you in the schedule.',
+    keepFree:      'Ads help us keep MotoDash free.',
+    goAdFree:      'Go ad-free with a monthly subscription.',
   },
 };

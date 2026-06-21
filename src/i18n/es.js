@@ -42,6 +42,8 @@ export default {
     storeName: 'Nombre de la tienda',
     openingHour: 'Hora de apertura (ej. 08:00)',
     closingHour: 'Hora de cierre (ej. 20:00)',
+    openHour: 'Apertura',
+    closeHour: 'Cierre',
     daysOpen: 'Días abiertos',
     storeLocation: 'Ubicación de la tienda',
     useMyLocation: 'Usar mi ubicación actual',
@@ -293,10 +295,20 @@ export default {
     errorFinding: 'No se pudieron cargar los conductores cercanos. Inténtalo de nuevo.',
     metersAway: '%{m} m de distancia',
   },
+  storeProfile: {
+    title: 'Perfil de tienda',
+    storePhoto: 'Foto de la tienda',
+    tapToAddPhoto: 'Toca para agregar foto',
+    changePhoto: 'Cambiar foto',
+    hours: 'Horario',
+    savedMsg: 'Tu perfil ha sido actualizado.',
+  },
+
   storeHome: {
     title: 'MotoDash',
     items: 'Artículos',
     drivers: 'Conductores',
+    profile: 'Perfil',
     help: 'Ayuda',
     openOrders: 'Pedidos abiertos',
     noOpenOrders: 'No hay pedidos abiertos',
@@ -410,5 +422,13 @@ export default {
     distance_dr_miami: { label: 'RD a Miami',          icon: '✈️', desc: 'Recorriste 1,700 km a Miami' },
     distance_dr_nyc:   { label: 'RD a Nueva York',     icon: '🗽', desc: 'Recorriste 2,600 km a Nueva York' },
     distance_moon:     { label: 'A la Luna',           icon: '🌙', desc: 'Recorriste 384,400 km a la Luna' },
+  },
+
+  // ── AD MESSAGES ───────────────────────────────────────────
+  adMessage: {
+    clientWaiting: 'Por favor mira este anuncio mientras buscamos un conductor para ti.',
+    driverReady:   'Por favor mira este anuncio mientras te añadimos al horario.',
+    keepFree:      'Los anuncios nos ayudan a mantener MotoDash gratuito.',
+    goAdFree:      'Elimina los anuncios con una suscripción mensual.',
   },
 };
