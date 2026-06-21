@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { isNoAdsActive } from './subscriptionService';
 import {
   InterstitialAd,
   RewardedAd,
@@ -39,7 +40,8 @@ function testId(type) {
 
 // Tries to load an interstitial ad. Falls back to test ad if real one times out.
 // Resolves when ad closes, or if fallback also fails — never hangs.
-export function showInterstitial() {
+export async function showInterstitial() {
+  if (await isNoAdsActive()) return;
   return new Promise((resolve) => {
     let resolved = false;
     const done = () => { if (!resolved) { resolved = true; resolve(); } };
@@ -66,7 +68,8 @@ export function showInterstitial() {
 }
 
 // Rewarded video — falls back to test ad if real one times out.
-export function showRewarded() {
+export async function showRewarded() {
+  if (await isNoAdsActive()) return;
   return new Promise((resolve) => {
     let resolved = false;
     const done = () => { if (!resolved) { resolved = true; resolve(); } };
@@ -89,7 +92,8 @@ export function showRewarded() {
 }
 
 // Playable (rewarded interstitial) — falls back to test ad if real one times out.
-export function showPlayable() {
+export async function showPlayable() {
+  if (await isNoAdsActive()) return;
   return new Promise((resolve) => {
     let resolved = false;
     const done = () => { if (!resolved) { resolved = true; resolve(); } };

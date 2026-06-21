@@ -114,8 +114,9 @@ const styles = StyleSheet.create({
   container: { flexGrow: 1, justifyContent: 'center', padding: 24 },
   logo: {
     alignSelf:    'center',
-    width:        '72%',
-    aspectRatio:  2500 / 1920,
+    height:       160,
+    width:        160 * (1263 / 1050),
+    marginBottom: 8,
     marginBottom: 8,
   },
   subtitle: { fontSize: 15, textAlign: 'center', color: colors.textSecondary, marginBottom: 32 },

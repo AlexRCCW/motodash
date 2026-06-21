@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   ActivityIndicator, Image,
@@ -7,19 +7,24 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
 import { logout } from '../../services/authService';
+import { isNoAdsActive } from '../../services/subscriptionService';
 import { t } from '../../i18n';
 import { getRideJob, getDeliveryJob } from '../../services/jobService';
 import { registerForPushNotifications } from '../../services/notificationService';
-import { colors, SlashDivider, radius } from '../../theme';
+import { useThemeColors, SlashDivider, radius } from '../../theme';
 
 export default function ClientHomeScreen({ navigation }) {
+  const { colors } = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { account } = useAuth();
-  const [checking, setChecking] = useState(true);
+  const [checking,    setChecking]    = useState(true);
+  const [subscribed,  setSubscribed]  = useState(true);
 
   useEffect(() => {
     if (account?.id) {
       registerForPushNotifications(account.id);
     }
+    isNoAdsActive().then(active => setSubscribed(active));
     checkOpenJob();
   }, []);
 
@@ -77,6 +82,9 @@ export default function ClientHomeScreen({ navigation }) {
           <TouchableOpacity style={styles.heroBtn} onPress={() => navigation.navigate('Instructions')}>
             <Text style={styles.heroBtnText}>{t('clientHome.help').toUpperCase()}</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.heroBtn} onPress={() => navigation.navigate('Account')}>
+            <Text style={styles.heroBtnText}>{t('account.title').toUpperCase()}</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={[styles.heroBtn, styles.heroBtnRed]} onPress={logout}>
             <Text style={[styles.heroBtnText, styles.heroBtnRedText]}>{t('auth.signOut').toUpperCase()}</Text>
           </TouchableOpacity>
@@ -127,11 +135,19 @@ export default function ClientHomeScreen({ navigation }) {
         </TouchableOpacity>
 
       </View>
+
+      {/* Go Ad Free footer */}
+      {!subscribed && (
+        <TouchableOpacity style={styles.adFreeFooter} onPress={() => navigation.navigate('Subscription')}>
+          <Text style={styles.adFreeText}>{t('account.goAdFree')}</Text>
+        </TouchableOpacity>
+      )}
+
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors) => StyleSheet.create({
   root:    { flex: 1, backgroundColor: colors.background },
   centered:{ flex: 1, justifyContent: 'center', alignItems: 'center' },
 
@@ -163,9 +179,9 @@ const styles = StyleSheet.create({
   },
 
   logo: {
-    alignSelf:    'center',
-    width:        '78%',
-    aspectRatio:  2500 / 1920,
+    alignSelf: 'center',
+    height:    160,
+    width:     160 * (1263 / 1050),
     marginTop:    16,
     marginBottom: 8,
   },
@@ -205,4 +221,17 @@ const styles = StyleSheet.create({
   },
   actionDesc: { fontSize: 13, color: colors.textSecondary, marginTop: 4 },
   actionArrow:{ fontSize: 22, color: colors.textSecondary },
+  adFreeFooter: {
+    paddingVertical:   12,
+    alignItems:        'center',
+    borderTopWidth:    1,
+    borderTopColor:    colors.border,
+    backgroundColor:   colors.background,
+  },
+  adFreeText: {
+    fontSize:      16,
+    fontWeight:    '600',
+    color:         colors.primary,
+    letterSpacing: 0.5,
+  },
 });

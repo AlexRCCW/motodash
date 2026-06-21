@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   Alert
@@ -9,7 +9,7 @@ import { useAuth } from '../../context/AuthContext';
 import { requestLocationPermission, watchLocation, haversineMeters } from '../../services/locationService';
 import { markRideCompleteDriver } from '../../services/jobService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { colors, SlashDivider, radius } from '../../theme';
+import { useThemeColors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 import { showInterstitial } from '../../services/adService';
 
@@ -18,6 +18,8 @@ const CLIENT_GEOFENCE_METERS = 91.44;
 
 export default function DriverRideScreen({ navigation, route }) {
   const { account } = useAuth();
+  const { colors } = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const job = route.params?.job;
 
   const [driverLocation, setDriverLocation] = useState(null);
@@ -169,7 +171,7 @@ export default function DriverRideScreen({ navigation, route }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   centered:  { flex: 1, justifyContent: 'center', alignItems: 'center' },
   centeredText: { fontSize: 14, color: colors.textSecondary },

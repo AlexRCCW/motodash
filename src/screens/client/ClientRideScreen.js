@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   Alert, ActivityIndicator
@@ -10,13 +10,15 @@ import { useAuth } from '../../context/AuthContext';
 import { requestLocationPermission, getCurrentLocation } from '../../services/locationService';
 import { createRideJob, cancelRideJob, markRideCompleteClient, getRideJob, dispatchJob } from '../../services/jobService';
 import { supabase } from '../../config/supabase';
-import { colors, SlashDivider, radius } from '../../theme';
+import { useThemeColors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 import { showInterstitial } from '../../services/adService';
 import AdMessageOverlay from '../../components/AdMessageOverlay';
 
 export default function ClientRideScreen({ navigation, route }) {
   const { account } = useAuth();
+  const { colors } = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const resuming = route.params?.resuming;
 
   const [location, setLocation]     = useState(null);
@@ -147,6 +149,7 @@ export default function ClientRideScreen({ navigation, route }) {
         visible={showAdMsg}
         messages={CLIENT_AD_MESSAGES}
         onDone={() => { setShowAdMsg(false); showInterstitial(); }}
+        navigation={navigation}
       />
 
       {/* Map */}
@@ -236,7 +239,7 @@ export default function ClientRideScreen({ navigation, route }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors) => StyleSheet.create({
   container:          { flex: 1, backgroundColor: colors.background },
   map:                { flex: 1 },
   panel: {

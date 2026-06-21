@@ -1,17 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList,
   TouchableOpacity, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../config/supabase';
-import { colors, SlashDivider, radius } from '../../theme';
+import { useThemeColors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 
 const MAX_OTHER_ITEMS = 10;
 
 export default function ClientInventoryScreen({ navigation, route }) {
   const { store, clientLocation } = route.params;
+  const { colors } = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [items,      setItems]      = useState([]);
   const [order,      setOrder]      = useState({});          // { itemId: qty }
   const [otherItems, setOtherItems] = useState([]);          // [{ id, name }]
@@ -251,7 +253,7 @@ export default function ClientInventoryScreen({ navigation, route }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors) => StyleSheet.create({
   root:     { flex: 1, backgroundColor: colors.background },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
 

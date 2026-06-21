@@ -7,6 +7,8 @@
 
 import React from 'react';
 import { View } from 'react-native';
+import { useTheme } from '../context/ThemeContext';
+export { useTheme, useTheme as useThemeColors } from '../context/ThemeContext';
 
 // ── Color palette ─────────────────────────────────────────────
 
@@ -59,13 +61,16 @@ export const radius = {
 // ── Signature: red slash divider ──────────────────────────────
 // Place between the #0a0a0a hero panel and the white content area
 
-export const SlashDivider = () => (
-  <View
-    style={{ height: 4, backgroundColor: colors.primary }}
-    accessibilityElementsHidden
-    importantForAccessibility="no"
-  />
-);
+export const SlashDivider = () => {
+  const { colors: themeColors } = useTheme();
+  return (
+    <View
+      style={{ height: 4, backgroundColor: themeColors.primary }}
+      accessibilityElementsHidden
+      importantForAccessibility="no"
+    />
+  );
+};
 
 // ── Offer/alert card left-border style ────────────────────────
 // Apply to a card's container to get the red left-border accent

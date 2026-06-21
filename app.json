@@ -24,6 +24,7 @@
       }
     },
     "android": {
+      "package": "com.aihughes8220.motodash",
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo.png",
         "backgroundImage": "./assets/android-icon-background.png",

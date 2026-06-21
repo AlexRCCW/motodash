@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Image,
   TouchableOpacity, ActivityIndicator, Alert,
@@ -6,7 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../config/supabase';
 import { requestLocationPermission, getCurrentLocation } from '../../services/locationService';
-import { colors, SlashDivider, radius } from '../../theme';
+import { useThemeColors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 
 const STORE_TYPE_ICONS = {
@@ -20,6 +20,8 @@ const STORE_TYPE_ICONS = {
 
 export default function ClientStoresScreen({ navigation }) {
   const [stores,   setStores]   = useState([]);
+  const { colors } = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [loading,  setLoading]  = useState(true);
   const [location, setLocation] = useState(null);
 
@@ -173,7 +175,7 @@ export default function ClientStoresScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
 
   // ── Hero panel ──

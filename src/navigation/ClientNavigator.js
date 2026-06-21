@@ -6,6 +6,8 @@ import ClientStoresScreen    from '../screens/client/ClientStoresScreen';
 import ClientInventoryScreen from '../screens/client/ClientInventoryScreen';
 import ClientOrderScreen     from '../screens/client/ClientOrderScreen';
 import InstructionsScreen    from '../screens/shared/InstructionsScreen';
+import SubscriptionScreen    from '../screens/shared/SubscriptionScreen';
+import AccountScreen         from '../screens/shared/AccountScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -18,6 +20,8 @@ export default function ClientNavigator() {
       <Stack.Screen name="ClientInventory" component={ClientInventoryScreen} />
       <Stack.Screen name="ClientOrder"     component={ClientOrderScreen} />
       <Stack.Screen name="Instructions"    component={InstructionsScreen} />
+      <Stack.Screen name="Subscription"    component={SubscriptionScreen} />
+      <Stack.Screen name="Account"         component={AccountScreen} />
     </Stack.Navigator>
   );
 }

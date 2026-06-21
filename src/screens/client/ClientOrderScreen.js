@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
   TouchableOpacity, TextInput, Alert,
@@ -10,7 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../config/supabase';
 import { markDeliveryCompleteClient } from '../../services/jobService';
-import { colors, SlashDivider, radius } from '../../theme';
+import { useThemeColors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 import { showInterstitial } from '../../services/adService';
 
@@ -25,6 +25,8 @@ const STATUS_CONFIG = {
 
 export default function ClientOrderScreen({ navigation, route }) {
   const { account } = useAuth();
+  const { colors } = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { store, clientLocation, orderItems, job: resumedJob } = route.params || {};
 
   const [notes,       setNotes]       = useState('');
@@ -309,7 +311,7 @@ export default function ClientOrderScreen({ navigation, route }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
 
   // ── Hero panel ──

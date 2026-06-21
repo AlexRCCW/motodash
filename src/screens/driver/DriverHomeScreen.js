@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   Alert, ActivityIndicator, Image,
@@ -14,15 +14,19 @@ import {
   acceptRideJob, acceptDeliveryJob,
 } from '../../services/jobService';
 import { registerForPushNotifications, setupNotificationListeners, consumePendingJobOffer } from '../../services/notificationService';
-import { colors, SlashDivider, radius } from '../../theme';
+import { useThemeColors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 import { showPlayable } from '../../services/adService';
+import { isNoAdsActive } from '../../services/subscriptionService';
 import AdMessageOverlay from '../../components/AdMessageOverlay';
 
 const OFFER_TIMEOUT = 15;
 
 export default function DriverHomeScreen({ navigation }) {
+  const { colors } = useThemeColors();
+  const s = useMemo(() => makeStyles(colors), [colors]);
   const { account }                 = useAuth();
+  const [subscribed,  setSubscribed]  = useState(true); // assume subscribed until checked
   const [status,      setStatus]      = useState('idle');  // idle | loading | waiting
   const [location,    setLocation]    = useState(null);
   const [jobOffer,    setJobOffer]    = useState(null);
@@ -36,6 +40,7 @@ export default function DriverHomeScreen({ navigation }) {
       registerForPushNotifications(account.id);
       checkActiveJob();
     }
+    isNoAdsActive().then(active => setSubscribed(active));
     const cleanup = setupNotificationListeners({ onJobOffer: handleJobOffer });
 
     // Handle the case where the driver tapped a job offer notification
@@ -249,6 +254,7 @@ export default function DriverHomeScreen({ navigation }) {
         visible={showAdMsg}
         messages={DRIVER_AD_MESSAGES}
         onDone={() => { setShowAdMsg(false); adResolveRef.current?.(); }}
+        navigation={navigation}
       />
 
       {/* ── Hero panel ── */}
@@ -268,6 +274,12 @@ export default function DriverHomeScreen({ navigation }) {
             onPress={() => navigation.navigate('Instructions')}
           >
             <Text style={s.heroBtnText}>{t('driverHome.help').toUpperCase()}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={s.heroBtn}
+            onPress={() => navigation.navigate('Account')}
+          >
+            <Text style={s.heroBtnText}>{t('account.title').toUpperCase()}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[s.heroBtn, s.heroBtnRed]} onPress={handleSignOut}>
             <Text style={[s.heroBtnText, s.heroBtnRedText]}>
@@ -335,13 +347,20 @@ export default function DriverHomeScreen({ navigation }) {
         )}
       </SafeAreaView>
 
+      {/* Go Ad Free footer */}
+      {!subscribed && (
+        <TouchableOpacity style={s.adFreeFooter} onPress={() => navigation.navigate('Subscription')}>
+          <Text style={s.adFreeText}>{t('account.goAdFree')}</Text>
+        </TouchableOpacity>
+      )}
+
     </View>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────
 
-const s = StyleSheet.create({
+const makeStyles = (colors) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
 
   // ── Hero panel ──
@@ -411,11 +430,11 @@ const s = StyleSheet.create({
   },
 
   // ── Map area ──
-  mapArea:        { flex: 1, backgroundColor: colors.surface },
+  mapArea:        { flex: 1, backgroundColor: colors.background },
   mapPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   placeholderLogo: {
-    width:        '72%',
-    aspectRatio:  2500 / 1920,
+    height:       160,
+    width:        160 * (1263 / 1050),
     marginBottom: 24,
   },
   mapPlaceholderText: {
@@ -569,5 +588,18 @@ const s = StyleSheet.create({
     fontSize:      12,
     fontWeight:    '500',
     letterSpacing:  2,
+  },
+  adFreeFooter: {
+    paddingVertical:   12,
+    alignItems:        'center',
+    borderTopWidth:    1,
+    borderTopColor:    colors.border,
+    backgroundColor:   colors.background,
+  },
+  adFreeText: {
+    fontSize:      16,
+    fontWeight:    '600',
+    color:         colors.primary,
+    letterSpacing: 0.5,
   },
 });
