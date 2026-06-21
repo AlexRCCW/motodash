@@ -8,12 +8,12 @@ import {
   TestIds,
 } from 'react-native-google-mobile-ads';
 
-// ─── TODO: Replace with real Ad Unit IDs from AdMob console before release ───
 const IOS_IDS = {
-  interstitial:         'ca-app-pub-REPLACE_IOS_APP_ID/REPLACE_INTERSTITIAL_UNIT',
-  rewarded:             'ca-app-pub-REPLACE_IOS_APP_ID/REPLACE_REWARDED_UNIT',
-  rewardedInterstitial: 'ca-app-pub-REPLACE_IOS_APP_ID/REPLACE_REWARDED_INTERSTITIAL_UNIT',
+  interstitial:         'ca-app-pub-8920374804780183/4300660478',
+  rewarded:             'ca-app-pub-8920374804780183/6277187200',
+  rewardedInterstitial: 'ca-app-pub-8920374804780183/5613742148',
 };
+// TODO: Add Android ad unit IDs once Android app is registered in AdMob
 const ANDROID_IDS = {
   interstitial:         'ca-app-pub-REPLACE_ANDROID_APP_ID/REPLACE_INTERSTITIAL_UNIT',
   rewarded:             'ca-app-pub-REPLACE_ANDROID_APP_ID/REPLACE_REWARDED_UNIT',
