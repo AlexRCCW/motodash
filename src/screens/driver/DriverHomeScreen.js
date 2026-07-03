@@ -11,7 +11,7 @@ import { supabase }       from '../../config/supabase';
 import { requestLocationPermission, getCurrentLocation } from '../../services/locationService';
 import {
   setDriverReady, setDriverNotReady, incrementDriverRefusals,
-  acceptRideJob, acceptDeliveryJob,
+  acceptRideJob, acceptDeliveryJob, getDriverAverageRating,
 } from '../../services/jobService';
 import { registerForPushNotifications, setupNotificationListeners, consumePendingJobOffer } from '../../services/notificationService';
 import { useThemeColors, SlashDivider, radius } from '../../theme';
@@ -32,6 +32,8 @@ export default function DriverHomeScreen({ navigation }) {
   const [jobOffer,    setJobOffer]    = useState(null);
   const [offerTimer,  setOfferTimer]  = useState(0);
   const [showAdMsg,   setShowAdMsg]   = useState(false);
+  const [avgRating,   setAvgRating]   = useState(null);
+  const [ratingCount, setRatingCount] = useState(0);
   const timerRef = useRef(null);
   const adResolveRef = useRef(null);
 
@@ -41,6 +43,9 @@ export default function DriverHomeScreen({ navigation }) {
       checkActiveJob();
     }
     isNoAdsActive().then(active => setSubscribed(active));
+    getDriverAverageRating(account.id).then(({ average, count }) => {
+      if (average !== null) { setAvgRating(average); setRatingCount(count); }
+    });
     const cleanup = setupNotificationListeners({ onJobOffer: handleJobOffer });
 
     // Handle the case where the driver tapped a job offer notification
@@ -102,6 +107,13 @@ export default function DriverHomeScreen({ navigation }) {
       }
       setStatus('waiting');
     }
+  }
+
+  function renderRatingBadge() {
+    if (avgRating === null) return null;
+    return (
+      <Text style={s.ratingBadge}>★ {avgRating.toFixed(1)}  ·  {ratingCount} {ratingCount === 1 ? 'rating' : 'ratings'}</Text>
+    );
   }
 
   // ── Job offer ────────────────────────────────────────────────
@@ -289,7 +301,10 @@ export default function DriverHomeScreen({ navigation }) {
         </View>
 
         {/* Status */}
-        <View style={s.heroStatus}>{renderHeroStatus()}</View>
+        <View style={s.heroStatus}>
+          {renderHeroStatus()}
+          {renderRatingBadge()}
+        </View>
 
       </SafeAreaView>
 
@@ -427,6 +442,12 @@ const makeStyles = (colors) => StyleSheet.create({
     fontWeight:    '500',
     color:         colors.mutedOnDark,
     letterSpacing:  2,
+  },
+  ratingBadge: {
+    fontSize:      11,
+    color:         '#F39C12',
+    letterSpacing:  0.5,
+    marginTop:      6,
   },
 
   // ── Map area ──

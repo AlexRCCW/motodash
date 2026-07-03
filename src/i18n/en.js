@@ -307,6 +307,9 @@ export default {
     letsGo: "Let's go!",
     error: 'Error',
     boostError: 'Could not activate your boost. Please try again.',
+    avgRating: 'Average rating',
+    rating: 'rating',
+    ratings: 'ratings',
   },
 
   // ── STORE DRIVERS ─────────────────────────────────────────

@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../config/supabase';
 import { useAuth } from '../../context/AuthContext';
+import { getDriverAverageRating } from '../../services/jobService';
 import { useThemeColors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 import { showRewarded } from '../../services/adService';
@@ -24,6 +25,8 @@ export default function DriverStatsScreen({ navigation }) {
   const [awards, setAwards]           = useState([]);
   const [loading, setLoading]         = useState(true);
   const [rewardedLoading, setRewardedLoading] = useState(false);
+  const [avgRating, setAvgRating]     = useState(null);
+  const [ratingCount, setRatingCount] = useState(0);
 
   useEffect(() => {
     fetchStats();
@@ -31,12 +34,17 @@ export default function DriverStatsScreen({ navigation }) {
 
   async function fetchStats() {
     setLoading(true);
-    const [statsRes, awardsRes] = await Promise.all([
+    const [statsRes, awardsRes, ratingRes] = await Promise.all([
       supabase.from('driver_stats').select('*').eq('id', account.id).single(),
       supabase.from('driver_awards').select('*').eq('driver_id', account.id).order('awarded_at'),
+      getDriverAverageRating(account.id),
     ]);
     if (statsRes.data) setStats(statsRes.data);
     if (awardsRes.data) setAwards(awardsRes.data);
+    if (ratingRes.average !== null) {
+      setAvgRating(ratingRes.average);
+      setRatingCount(ratingRes.count);
+    }
     setLoading(false);
   }
 
@@ -152,6 +160,19 @@ export default function DriverStatsScreen({ navigation }) {
           </View>
         </View>
 
+        {/* Rating card */}
+        <View style={[styles.section, styles.ratingCard]}>
+          <Text style={styles.ratingStars}>
+            {avgRating !== null ? `★ ${avgRating.toFixed(1)}` : '★ —'}
+          </Text>
+          <Text style={styles.ratingLabel}>{t('driverStats.avgRating').toUpperCase()}</Text>
+          {ratingCount > 0 && (
+            <Text style={styles.ratingCount}>
+              {ratingCount} {ratingCount === 1 ? t('driverStats.rating') : t('driverStats.ratings')}
+            </Text>
+          )}
+        </View>
+
         {/* 2× boost */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('driverStats.weeklyBoost').toUpperCase()}</Text>
@@ -254,6 +275,34 @@ const makeStyles = (colors) => StyleSheet.create({
     letterSpacing:  1.5,
     fontWeight:    '500',
     textTransform: 'uppercase',
+  },
+
+  ratingCard: {
+    backgroundColor: colors.surface,
+    borderRadius:    radius.md,
+    borderWidth:     1,
+    borderColor:     colors.border,
+    borderLeftWidth: 4,
+    borderLeftColor: '#F39C12',
+    padding:         16,
+    alignItems:      'center',
+  },
+  ratingStars: {
+    fontSize:   32,
+    fontWeight: '500',
+    color:      '#F39C12',
+  },
+  ratingLabel: {
+    fontSize:      11,
+    color:         colors.textSecondary,
+    marginTop:      6,
+    letterSpacing:  1.5,
+    fontWeight:    '500',
+  },
+  ratingCount: {
+    fontSize:  12,
+    color:     colors.textSecondary,
+    marginTop:  4,
   },
 
   section:      { marginBottom: 24 },

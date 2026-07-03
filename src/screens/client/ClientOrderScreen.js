@@ -14,19 +14,18 @@ import { useThemeColors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 import { showInterstitial } from '../../services/adService';
 
-const STATUS_CONFIG = {
-  pending:          { color: colors.primary,      bg: colors.surface },
-  accepted:         { color: colors.textPrimary,  bg: colors.surface },
-  out_for_delivery: { color: colors.primary,      bg: colors.surface },
-  delivered:        { color: colors.textPrimary,  bg: colors.surface },
-  canceled:         { color: colors.primary,      bg: colors.surface },
-  returned:         { color: colors.textSecondary,bg: colors.surface },
-};
-
 export default function ClientOrderScreen({ navigation, route }) {
   const { account } = useAuth();
   const { colors } = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const STATUS_CONFIG = {
+    pending:          { color: colors.primary,      bg: colors.surface },
+    accepted:         { color: colors.textPrimary,  bg: colors.surface },
+    out_for_delivery: { color: colors.primary,      bg: colors.surface },
+    delivered:        { color: colors.textPrimary,  bg: colors.surface },
+    canceled:         { color: colors.primary,      bg: colors.surface },
+    returned:         { color: colors.textSecondary,bg: colors.surface },
+  };
   const { store, clientLocation, orderItems, job: resumedJob } = route.params || {};
 
   const [notes,       setNotes]       = useState('');

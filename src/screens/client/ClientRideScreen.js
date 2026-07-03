@@ -8,12 +8,13 @@ import MapView, { Marker } from 'react-native-maps';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
 import { requestLocationPermission, getCurrentLocation } from '../../services/locationService';
-import { createRideJob, cancelRideJob, markRideCompleteClient, getRideJob, dispatchJob } from '../../services/jobService';
+import { createRideJob, cancelRideJob, markRideCompleteClient, getRideJob, dispatchJob, submitDriverRating } from '../../services/jobService';
 import { supabase } from '../../config/supabase';
 import { useThemeColors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 import { showInterstitial } from '../../services/adService';
 import AdMessageOverlay from '../../components/AdMessageOverlay';
+import RatingModal from '../../components/RatingModal';
 
 export default function ClientRideScreen({ navigation, route }) {
   const { account } = useAuth();
@@ -27,6 +28,8 @@ export default function ClientRideScreen({ navigation, route }) {
   const [completing, setCompleting] = useState(false);
   const [adShownWaiting, setAdShownWaiting] = useState(false);
   const [showAdMsg, setShowAdMsg] = useState(false);
+  const [showRating, setShowRating] = useState(false);
+  const ratingResolveRef = React.useRef(null);
 
   useEffect(() => {
     initLocation();
@@ -124,6 +127,25 @@ export default function ClientRideScreen({ navigation, route }) {
   async function handleMarkComplete() {
     setCompleting(true);
     await showInterstitial();
+
+    // Collect rating before marking complete
+    const ratingResult = await new Promise(resolve => {
+      ratingResolveRef.current = resolve;
+      setShowRating(true);
+    });
+
+    // Fire-and-forget rating submission — don't block the completion flow
+    if (job?.driver_id) {
+      submitDriverRating({
+        driverId:   job.driver_id,
+        clientId:   account.id,
+        rideJobId:  job.id,
+        rating:     ratingResult.rating,
+        comment:    ratingResult.comment,
+        isReport:   ratingResult.isReport,
+      }).catch(() => {});
+    }
+
     const { error } = await markRideCompleteClient(job.id);
     if (error) {
       Alert.alert(t('shared.error'), t('clientRide.couldNotComplete'),
@@ -134,6 +156,11 @@ export default function ClientRideScreen({ navigation, route }) {
     }
     await AsyncStorage.multiRemove(['open_job', 'open_job_type', 'open_job_id']);
     navigation.replace('ClientHome');
+  }
+
+  function handleRatingSubmit(result) {
+    setShowRating(false);
+    ratingResolveRef.current?.(result);
   }
 
   const CLIENT_AD_MESSAGES = [
@@ -151,6 +178,8 @@ export default function ClientRideScreen({ navigation, route }) {
         onDone={() => { setShowAdMsg(false); showInterstitial(); }}
         navigation={navigation}
       />
+
+      <RatingModal visible={showRating} onSubmit={handleRatingSubmit} />
 
       {/* Map */}
       <MapView

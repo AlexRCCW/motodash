@@ -282,6 +282,9 @@ export default {
     letsGo: '¡Vamos!',
     error: 'Error',
     boostError: 'No se pudo activar el impulso. Inténtalo de nuevo.',
+    avgRating: 'Calificación promedio',
+    rating: 'calificación',
+    ratings: 'calificaciones',
   },
   storeDrivers: {
     title: 'Conductores cercanos',

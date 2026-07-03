@@ -282,6 +282,9 @@ export default {
     letsGo: 'Allons-y !',
     error: 'Erreur',
     boostError: 'Impossible d\'activer le boost. Veuillez réessayer.',
+    avgRating: 'Note moyenne',
+    rating: 'évaluation',
+    ratings: 'évaluations',
   },
   storeDrivers: {
     title: 'Conducteurs à proximité',

@@ -367,6 +367,32 @@ export async function uploadStorefrontPhoto(userId, base64) {
   return { url: data.publicUrl, error: null };
 }
 
+// ── DRIVER RATINGS ───────────────────────────────────────────
+
+export async function submitDriverRating({ driverId, clientId, rideJobId, rating, comment, isReport }) {
+  const { error } = await supabase
+    .from('driver_ratings')
+    .insert({
+      driver_id:   driverId,
+      client_id:   clientId,
+      ride_job_id: rideJobId,
+      rating,
+      comment:     comment ?? null,
+      is_report:   isReport ?? false,
+    });
+  return { error };
+}
+
+export async function getDriverAverageRating(driverId) {
+  const { data, error } = await supabase
+    .from('driver_ratings')
+    .select('rating')
+    .eq('driver_id', driverId);
+  if (error || !data?.length) return { average: null, count: 0, error };
+  const average = data.reduce((sum, r) => sum + r.rating, 0) / data.length;
+  return { average: Math.round(average * 10) / 10, count: data.length, error: null };
+}
+
 // ── EDGE FUNCTION DISPATCH ────────────────────────────────────
 
 /**
