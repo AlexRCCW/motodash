@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../config/supabase';
-import { addPreferredDriver } from '../../services/jobService';
+import { addPreferredDriver, removePreferredDriver } from '../../services/jobService';
 import { colors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 
@@ -18,8 +18,9 @@ export default function StoreDriversScreen({ navigation }) {
   const { account } = useAuth();
   const [drivers,  setDrivers]  = useState([]);
   const [loading,  setLoading]  = useState(true);
-  const [addingId, setAddingId] = useState(null);
-  const [added,    setAdded]    = useState(new Set());
+  const [addingId,   setAddingId]   = useState(null);
+  const [removingId, setRemovingId] = useState(null);
+  const [added,      setAdded]      = useState(new Set());
 
   useEffect(() => { loadNearbyDrivers(); }, []);
 
@@ -84,17 +85,48 @@ export default function StoreDriversScreen({ navigation }) {
     setAddingId(null);
   }
 
+  // ── Remove from preferred ────────────────────────────────────
+
+  async function handleRemove(driver) {
+    Alert.alert(
+      'Remove driver?',
+      `Remove ${driver.driver_name} from your preferred drivers?`,
+      [
+        { text: t('shared.cancel'), style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            setRemovingId(driver.driver_id);
+            const { error } = await removePreferredDriver(account.id, driver.driver_id);
+            if (error) {
+              Alert.alert(t('shared.error'), error.message);
+            } else {
+              setAdded(prev => {
+                const next = new Set(prev);
+                next.delete(driver.driver_id);
+                return next;
+              });
+            }
+            setRemovingId(null);
+          },
+        },
+      ]
+    );
+  }
+
   // ── Render ───────────────────────────────────────────────────
 
   function renderDriver({ item }) {
-    const isAdded   = added.has(item.driver_id);
-    const isAdding  = addingId === item.driver_id;
-    const initial   = item.driver_name?.[0]?.toUpperCase() ?? '?';
-    const distanceM = Math.round(item.distance_m);
+    const isAdded    = added.has(item.driver_id);
+    const isAdding   = addingId === item.driver_id;
+    const isRemoving = removingId === item.driver_id;
+    const initial    = item.driver_name?.[0]?.toUpperCase() ?? '?';
+    const distanceM  = Math.round(item.distance_m);
 
     return (
       <View style={styles.driverRow}>
-        {/* Avatar — initials circle */}
+        {/* Avatar */}
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{initial}</Text>
         </View>
@@ -110,8 +142,8 @@ export default function StoreDriversScreen({ navigation }) {
         {/* Add / Added button */}
         <TouchableOpacity
           style={[styles.addBtn, isAdded && styles.addBtnDone]}
-          onPress={() => handleAdd(item)}
-          disabled={isAdded || isAdding}
+          onPress={() => !isAdded && handleAdd(item)}
+          disabled={isAdding || isRemoving}
           activeOpacity={0.75}
         >
           {isAdding ? (
@@ -122,6 +154,21 @@ export default function StoreDriversScreen({ navigation }) {
             </Text>
           )}
         </TouchableOpacity>
+
+        {/* Trash icon — only shown when driver is in preferred list */}
+        {isAdded && (
+          <TouchableOpacity
+            style={styles.removeBtn}
+            onPress={() => handleRemove(item)}
+            disabled={isRemoving}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            {isRemoving
+              ? <ActivityIndicator color={colors.primary} size="small" />
+              : <Text style={styles.removeIcon}>🗑</Text>
+            }
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
@@ -255,9 +302,8 @@ const styles = StyleSheet.create({
     minHeight:          34,
   },
   addBtnDone: {
-    backgroundColor: colors.surface,
-    borderWidth:     1,
-    borderColor:     colors.border,
+    backgroundColor: '#1e7e34',
+    borderWidth:     0,
   },
   addBtnText: {
     fontSize:      10,
@@ -266,5 +312,14 @@ const styles = StyleSheet.create({
     letterSpacing:  1.5,
     textTransform: 'uppercase',
   },
-  addBtnTextDone: { color: colors.textSecondary },
+  addBtnTextDone: { color: '#ffffff' },
+  removeBtn: {
+    width:           34,
+    height:          34,
+    borderRadius:    radius.sm,
+    backgroundColor: 'rgba(192,57,43,0.12)',
+    justifyContent:  'center',
+    alignItems:      'center',
+  },
+  removeIcon: { fontSize: 16 },
 });

@@ -48,7 +48,9 @@ export async function registerForPushNotifications(userId) {
     });
   }
 
-  const token = (await Notifications.getExpoPushTokenAsync()).data;
+  const token = (await Notifications.getExpoPushTokenAsync({
+    projectId: 'ae6c312e-ba95-4cac-90ed-c489abd57454',
+  })).data;
 
   // Save token to Supabase
   if (userId && token) {

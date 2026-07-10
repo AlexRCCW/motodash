@@ -62,7 +62,7 @@ export default function ClientHomeScreen({ navigation }) {
     return (
       <View style={styles.root}>
         <SafeAreaView style={styles.hero} edges={['top']}>
-          <Text style={styles.heroTitle}>MOTODASH</Text>
+          <Image source={require('../../../assets/app-logoV2.png')} style={styles.headerLogo} resizeMode="contain" />
         </SafeAreaView>
         <SlashDivider />
         <View style={styles.centered}>
@@ -77,7 +77,7 @@ export default function ClientHomeScreen({ navigation }) {
 
       {/* ── Hero panel ── */}
       <SafeAreaView style={styles.hero} edges={['top']}>
-        <Text style={styles.heroTitle}>MOTODASH</Text>
+        <Image source={require('../../../assets/app-logoV2.png')} style={styles.headerLogo} resizeMode="contain" />
         <View style={styles.heroActions}>
           <TouchableOpacity style={styles.heroBtn} onPress={() => navigation.navigate('Instructions')}>
             <Text style={styles.heroBtnText}>{t('clientHome.help').toUpperCase()}</Text>
@@ -153,12 +153,10 @@ const makeStyles = (colors) => StyleSheet.create({
 
   // ── Hero panel ──
   hero: { backgroundColor: colors.hero, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 14 },
-  heroTitle: {
-    fontSize:      18,
-    fontWeight:    '500',
-    color:         colors.onDark,
-    letterSpacing: 2,
-    textAlign:     'center',
+  headerLogo: {
+    width:        220,
+    height:        50,
+    alignSelf:    'center',
     marginBottom:  10,
   },
   heroActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center' },

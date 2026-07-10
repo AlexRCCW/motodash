@@ -32,7 +32,7 @@ export default function LoginScreen({ navigation }) {
       {/* ── Hero panel ── */}
       <SafeAreaView style={styles.hero} edges={['top']}>
         <View style={styles.heroInner}>
-          <Text style={styles.heroTitle}>MOTODASH</Text>
+          <Image source={require('../../../assets/app-logoV2.png')} style={styles.headerLogo} resizeMode="contain" />
         </View>
       </SafeAreaView>
 
@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
     paddingBottom:     14,
     alignItems:        'center',
   },
-  heroTitle: { fontSize: 18, fontWeight: '500', color: colors.onDark, letterSpacing: 2 },
+  headerLogo: { width: 220, height: 50, alignSelf: 'center', marginBottom: 10 },
 
   container: { flexGrow: 1, justifyContent: 'center', padding: 24 },
   logo: {

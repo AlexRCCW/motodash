@@ -201,6 +201,15 @@ export async function addPreferredDriver(storeId, driverId) {
   return { error: null };
 }
 
+export async function removePreferredDriver(storeId, driverId) {
+  const { error } = await supabase
+    .from('preferred_drivers')
+    .delete()
+    .eq('store_id', storeId)
+    .eq('driver_id', driverId);
+  return { error };
+}
+
 export async function getReadyPreferredDrivers(storeId) {
   // SECURITY DEFINER RPC — the 3-query chain fails because accounts RLS
   // blocks reading rows where id ≠ auth.uid(). The RPC bypasses that.

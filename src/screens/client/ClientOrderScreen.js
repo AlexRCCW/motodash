@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
   TouchableOpacity, TextInput, Alert,
@@ -9,7 +9,7 @@ import MapView, { Marker } from 'react-native-maps';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../config/supabase';
-import { markDeliveryCompleteClient } from '../../services/jobService';
+import { markDeliveryCompleteClient, cancelDeliveryOrder } from '../../services/jobService';
 import { useThemeColors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 import { showInterstitial } from '../../services/adService';
@@ -34,6 +34,9 @@ export default function ClientOrderScreen({ navigation, route }) {
   const [storeName,   setStoreName]   = useState(store?.store_name ?? '');
   const [completing,     setCompleting]     = useState(false);
   const [adShownWaiting, setAdShownWaiting] = useState(false);
+  const [secondsWaiting, setSecondsWaiting] = useState(0);
+  const [canceling,      setCanceling]      = useState(false);
+  const cancelTimerRef = useRef(null);
 
   const isPlaced = !!job;
 
@@ -71,6 +74,23 @@ export default function ClientOrderScreen({ navigation, route }) {
     return () => supabase.removeChannel(channel);
   }, [job?.id]);
 
+  // ── Cancel countdown timer ───────────────────────────────────
+  // Ticks every second while order is pending, enabling cancel after 10 min
+
+  useEffect(() => {
+    if (job?.status !== 'pending' || !job?.created_at) {
+      if (cancelTimerRef.current) clearInterval(cancelTimerRef.current);
+      return;
+    }
+    function tick() {
+      const elapsed = Math.floor((Date.now() - new Date(job.created_at).getTime()) / 1000);
+      setSecondsWaiting(elapsed);
+    }
+    tick();
+    cancelTimerRef.current = setInterval(tick, 1000);
+    return () => clearInterval(cancelTimerRef.current);
+  }, [job?.status, job?.created_at]);
+
   // ── Order flow ───────────────────────────────────────────────
 
   async function handlePlaceOrder() {
@@ -107,6 +127,31 @@ export default function ClientOrderScreen({ navigation, route }) {
     await AsyncStorage.setItem('open_job', 'true');
     await AsyncStorage.setItem('open_job_type', 'delivery');
     await AsyncStorage.setItem('open_job_id', data.id);
+  }
+
+  async function handleCancelOrder() {
+    Alert.alert(
+      'Cancel order?',
+      'Are you sure you want to cancel this order?',
+      [
+        { text: t('shared.no'), style: 'cancel' },
+        {
+          text: 'Yes, cancel',
+          style: 'destructive',
+          onPress: async () => {
+            setCanceling(true);
+            const { error } = await cancelDeliveryOrder(job.id, 'Canceled by customer');
+            if (error) {
+              Alert.alert(t('shared.error'), 'Could not cancel order. Please try again.');
+              setCanceling(false);
+              return;
+            }
+            await AsyncStorage.multiRemove(['open_job', 'open_job_type', 'open_job_id']);
+            navigation.replace('ClientHome');
+          },
+        },
+      ]
+    );
   }
 
   async function handleMarkReceived() {
@@ -291,6 +336,30 @@ export default function ClientOrderScreen({ navigation, route }) {
             </Text>
           </View>
         )}
+
+        {isPlaced && job?.status === 'pending' && (() => {
+          const CANCEL_AFTER = 600; // 10 minutes in seconds
+          const canCancel = secondsWaiting >= CANCEL_AFTER;
+          const remaining = Math.max(0, CANCEL_AFTER - secondsWaiting);
+          const mm = String(Math.floor(remaining / 60)).padStart(2, '0');
+          const ss = String(remaining % 60).padStart(2, '0');
+          return (
+            <TouchableOpacity
+              style={[styles.cancelOrderBtn, canCancel && styles.cancelOrderBtnActive]}
+              onPress={canCancel ? handleCancelOrder : undefined}
+              disabled={!canCancel || canceling}
+              activeOpacity={canCancel ? 0.75 : 1}
+            >
+              <Text style={[styles.cancelOrderBtnText, canCancel && styles.cancelOrderBtnTextActive]}>
+                {canceling
+                  ? 'CANCELING...'
+                  : canCancel
+                    ? 'CANCEL ORDER'
+                    : `CANCEL AVAILABLE IN ${mm}:${ss}`}
+              </Text>
+            </TouchableOpacity>
+          );
+        })()}
 
         {/* Canceled / returned — let the customer go home */}
         {isPlaced && ['canceled', 'returned'].includes(job?.status) && (
@@ -483,6 +552,29 @@ const makeStyles = (colors) => StyleSheet.create({
     fontWeight:    '500',
     letterSpacing:  2,
   },
+  cancelOrderBtn: {
+    marginTop:       10,
+    borderRadius:    radius.md,
+    borderWidth:     1,
+    borderColor:     colors.border,
+    paddingVertical: 14,
+    alignItems:      'center',
+    backgroundColor: colors.surface,
+  },
+  cancelOrderBtnActive: {
+    borderColor:     colors.primary,
+    backgroundColor: 'rgba(192,57,43,0.08)',
+  },
+  cancelOrderBtnText: {
+    fontSize:      11,
+    fontWeight:    '500',
+    color:         colors.textSecondary,
+    letterSpacing:  1.5,
+  },
+  cancelOrderBtnTextActive: {
+    color: colors.primary,
+  },
+
   waitingPanel: {
     backgroundColor: colors.surface,
     borderRadius:    radius.md,

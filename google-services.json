@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "524525365558",
+    "project_id": "motodash-20693",
+    "storage_bucket": "motodash-20693.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:524525365558:android:a1b67fa9ec000df22d2b97",
+        "android_client_info": {
+          "package_name": "com.aihughes8220.motodash"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDaTfGczkei01tX34kXGjnFPAEMjokj9a4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

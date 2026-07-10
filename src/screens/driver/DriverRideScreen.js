@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Alert
+  Alert, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
@@ -92,7 +92,7 @@ export default function DriverRideScreen({ navigation, route }) {
       {/* ── Hero panel ── */}
       <SafeAreaView style={styles.hero} edges={['top']}>
         <View style={styles.heroHeader}>
-          <Text style={styles.heroTitle}>MOTODASH</Text>
+          <Image source={require('../../../assets/app-logoV2.png')} style={styles.headerLogo} resizeMode="contain" />
           <Text style={styles.heroSubtitle}>{t('driverRide.goToClient').toUpperCase()}</Text>
         </View>
       </SafeAreaView>
@@ -179,7 +179,7 @@ const makeStyles = (colors) => StyleSheet.create({
   // ── Hero panel ──
   hero:        { backgroundColor: colors.hero, paddingBottom: 14 },
   heroHeader:  { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 },
-  heroTitle:   { fontSize: 18, fontWeight: '500', color: colors.onDark, letterSpacing: 2 },
+  headerLogo:  { width: 220, height: 50, alignSelf: 'center', marginBottom: 10 },
   heroSubtitle:{ fontSize: 12, color: colors.mutedOnDark, letterSpacing: 1.5, marginTop: 4 },
 
   map: { flex: 1 },

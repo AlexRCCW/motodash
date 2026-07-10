@@ -48,10 +48,18 @@ export default function DriverHomeScreen({ navigation }) {
     });
     const cleanup = setupNotificationListeners({ onJobOffer: handleJobOffer });
 
-    // Handle the case where the driver tapped a job offer notification
-    // that cold-launched the app (response won't fire via the listener above).
+    // consumePendingJobOffer covers cold-launch taps only.
+    // addNotificationResponseReceivedListener (inside setupNotificationListeners)
+    // already handles warm/background taps, so we only act here if the
+    // response listener hasn't already set a job offer.
     consumePendingJobOffer().then(data => {
-      if (data) handleJobOffer(data);
+      if (data) {
+        setJobOffer(prev => {
+          if (prev) return prev; // listener already handled it
+          handleJobOffer(data);
+          return prev;
+        });
+      }
     });
 
     return () => {
@@ -119,6 +127,7 @@ export default function DriverHomeScreen({ navigation }) {
   // ── Job offer ────────────────────────────────────────────────
 
   function handleJobOffer(data) {
+    if (timerRef.current) clearInterval(timerRef.current);
     setJobOffer(data);
     setOfferTimer(OFFER_TIMEOUT);
     timerRef.current = setInterval(() => {
@@ -273,7 +282,7 @@ export default function DriverHomeScreen({ navigation }) {
       <SafeAreaView style={s.hero} edges={['top']}>
 
         {/* Header rows */}
-        <Text style={s.heroTitle}>MOTODASH</Text>
+        <Image source={require('../../../assets/app-logoV2.png')} style={s.headerLogo} resizeMode="contain" />
         <View style={s.heroActions}>
           <TouchableOpacity
             style={s.heroBtn}
@@ -381,12 +390,10 @@ const makeStyles = (colors) => StyleSheet.create({
   // ── Hero panel ──
   hero: { backgroundColor: colors.hero, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 14 },
 
-  heroTitle: {
-    fontSize:      18,
-    fontWeight:    '500',
-    color:         colors.onDark,
-    letterSpacing: 2,
-    textAlign:     'center',
+  headerLogo: {
+    width:        220,
+    height:        50,
+    alignSelf:    'center',
     marginBottom:  10,
   },
   heroActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginBottom: 6 },
