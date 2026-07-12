@@ -36,31 +36,37 @@ export default function DriverHomeScreen({ navigation }) {
   const [ratingCount, setRatingCount] = useState(0);
   const timerRef = useRef(null);
   const adResolveRef = useRef(null);
+  const offerHandledRef = useRef(false);
 
   useEffect(() => {
+    offerHandledRef.current = false;
     if (account?.id) {
-      registerForPushNotifications(account.id);
+      registerForPushNotifications(account.id).catch(e =>
+        console.warn('[DriverHome] registerForPushNotifications failed:', e)
+      );
       checkActiveJob();
     }
-    isNoAdsActive().then(active => setSubscribed(active));
+    isNoAdsActive().then(active => setSubscribed(active)).catch(() => {});
     getDriverAverageRating(account.id).then(({ average, count }) => {
       if (average !== null) { setAvgRating(average); setRatingCount(count); }
-    });
-    const cleanup = setupNotificationListeners({ onJobOffer: handleJobOffer });
+    }).catch(() => {});
 
-    // consumePendingJobOffer covers cold-launch taps only.
-    // addNotificationResponseReceivedListener (inside setupNotificationListeners)
-    // already handles warm/background taps, so we only act here if the
-    // response listener hasn't already set a job offer.
-    consumePendingJobOffer().then(data => {
-      if (data) {
-        setJobOffer(prev => {
-          if (prev) return prev; // listener already handled it
-          handleJobOffer(data);
-          return prev;
-        });
-      }
+    const cleanup = setupNotificationListeners({
+      onJobOffer: (data) => {
+        if (offerHandledRef.current) return;
+        offerHandledRef.current = true;
+        handleJobOffer(data);
+      },
     });
+
+    // consumePendingJobOffer handles cold-launch taps (response listener
+    // may not fire in time). The ref prevents double-handling.
+    consumePendingJobOffer().then(data => {
+      if (data && !offerHandledRef.current) {
+        offerHandledRef.current = true;
+        handleJobOffer(data);
+      }
+    }).catch(e => console.warn('[DriverHome] consumePendingJobOffer failed:', e));
 
     return () => {
       cleanup();
@@ -127,21 +133,30 @@ export default function DriverHomeScreen({ navigation }) {
   // ── Job offer ────────────────────────────────────────────────
 
   function handleJobOffer(data) {
-    if (timerRef.current) clearInterval(timerRef.current);
-    setJobOffer(data);
-    setOfferTimer(OFFER_TIMEOUT);
-    timerRef.current = setInterval(() => {
-      setOfferTimer(prev => {
-        if (prev <= 1) { clearInterval(timerRef.current); handleRefuse(data); return 0; }
-        return prev - 1;
-      });
-    }, 1000);
+    try {
+      if (!data?.type || !data?.job_id) {
+        console.warn('handleJobOffer: invalid payload', JSON.stringify(data));
+        return;
+      }
+      if (timerRef.current) clearInterval(timerRef.current);
+      setJobOffer(data);
+      setOfferTimer(OFFER_TIMEOUT);
+      timerRef.current = setInterval(() => {
+        setOfferTimer(prev => {
+          if (prev <= 1) { clearInterval(timerRef.current); handleRefuse(data); return 0; }
+          return prev - 1;
+        });
+      }, 1000);
+    } catch (e) {
+      console.error('handleJobOffer error:', e);
+    }
   }
 
   async function handleRefuse(offer) {
     clearInterval(timerRef.current);
     setJobOffer(null);
-    const { limitReached } = await incrementDriverRefusals(account.id);
+    offerHandledRef.current = false;
+    const { limitReached } = await incrementDriverRefusals(account.id).catch(() => ({ limitReached: false }));
     if (limitReached) {
       Alert.alert(t('driverHome.markedUnavailable'), t('driverHome.refusedTooMany'));
       setStatus('idle');
@@ -150,11 +165,14 @@ export default function DriverHomeScreen({ navigation }) {
 
   async function handleAccept() {
     if (!jobOffer) return;
+    // Capture before any state changes or awaits
+    const offer = jobOffer;
     clearInterval(timerRef.current);
     setJobOffer(null);
+    offerHandledRef.current = false;
     const loc = await getCurrentLocation();
-    const args = { jobId: jobOffer.job_id, driverId: account.id, driverLat: loc?.lat, driverLng: loc?.lng };
-    if (jobOffer.type === 'ride_offer') {
+    const args = { jobId: offer.job_id, driverId: account.id, driverLat: loc?.lat, driverLng: loc?.lng };
+if (offer.type === 'ride_offer') {
       const { data, error } = await acceptRideJob(args);
       if (!error && data) navigation.navigate('DriverRide', { job: data });
       else Alert.alert(t('driverHome.jobUnavailable'), t('driverHome.jobTaken'));
@@ -245,7 +263,7 @@ export default function DriverHomeScreen({ navigation }) {
             <Text style={s.offerTimerText}>{offerTimer}s</Text>
           </View>
           <Text style={s.offerDistance}>
-            {t('driverHome.kmAway', { distance: jobOffer.distance?.toFixed(1) ?? '?' })}
+            {t('driverHome.kmAway', { distance: jobOffer.distance != null ? parseFloat(jobOffer.distance).toFixed(1) : '?' })}
           </Text>
           <View style={s.offerBtns}>
             <TouchableOpacity style={s.declineBtn} onPress={() => handleRefuse(jobOffer)}>

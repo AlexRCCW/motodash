@@ -7,13 +7,25 @@ import { supabase } from '../config/supabase';
 // so the driver sees the offer card without an OS alert on top.
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
-    const type = notification.request.content.data?.type;
-    const isJobOffer = type === 'ride_offer' || type === 'delivery_offer';
-    return {
-      shouldShowAlert: !isJobOffer,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    };
+    try {
+      const type = notification?.request?.content?.data?.type;
+      const isJobOffer = type === 'ride_offer' || type === 'delivery_offer';
+      console.log('[notif] handleNotification type:', type);
+      return {
+        shouldShowBanner: !isJobOffer,
+        shouldShowList:   !isJobOffer,
+        shouldPlaySound:  true,
+        shouldSetBadge:   false,
+      };
+    } catch (e) {
+      console.error('[notif] handleNotification error:', e);
+      return {
+        shouldShowBanner: true,
+        shouldShowList:   true,
+        shouldPlaySound:  true,
+        shouldSetBadge:   false,
+      };
+    }
   },
 });
 
@@ -48,9 +60,15 @@ export async function registerForPushNotifications(userId) {
     });
   }
 
-  const token = (await Notifications.getExpoPushTokenAsync({
-    projectId: 'ae6c312e-ba95-4cac-90ed-c489abd57454',
-  })).data;
+  let token;
+  try {
+    token = (await Notifications.getExpoPushTokenAsync({
+      projectId: 'ae6c312e-ba95-4cac-90ed-c489abd57454',
+    })).data;
+  } catch (e) {
+    console.warn('[notif] getExpoPushTokenAsync failed:', e);
+    return null;
+  }
 
   // Save token to Supabase
   if (userId && token) {
@@ -71,19 +89,29 @@ export async function registerForPushNotifications(userId) {
 export function setupNotificationListeners({ onJobOffer, onNotification }) {
   // Notification received while app is in foreground
   const foregroundSub = Notifications.addNotificationReceivedListener(notification => {
-    const data = notification.request.content.data;
-    if (data?.type === 'ride_offer' || data?.type === 'delivery_offer') {
-      onJobOffer && onJobOffer(data);
-    } else {
-      onNotification && onNotification(notification);
+    try {
+      const data = notification?.request?.content?.data;
+      console.log('[notif] foreground received:', JSON.stringify(data));
+      if (data?.type === 'ride_offer' || data?.type === 'delivery_offer') {
+        onJobOffer && onJobOffer(data);
+      } else {
+        onNotification && onNotification(notification);
+      }
+    } catch (e) {
+      console.error('[notif] foregroundSub error:', e);
     }
   });
 
   // Notification tapped (app in background)
   const responseSub = Notifications.addNotificationResponseReceivedListener(response => {
-    const data = response.notification.request.content.data;
-    if (data?.type === 'ride_offer' || data?.type === 'delivery_offer') {
-      onJobOffer && onJobOffer(data);
+    try {
+      const data = response?.notification?.request?.content?.data;
+      console.log('[notif] response tap received:', JSON.stringify(data));
+      if (data?.type === 'ride_offer' || data?.type === 'delivery_offer') {
+        onJobOffer && onJobOffer(data);
+      }
+    } catch (e) {
+      console.error('[notif] responseSub error:', e);
     }
   });
 
@@ -99,11 +127,16 @@ export function setupNotificationListeners({ onJobOffer, onNotification }) {
  * Call this once on DriverHomeScreen mount after listeners are set up.
  */
 export async function consumePendingJobOffer() {
-  const response = await Notifications.getLastNotificationResponseAsync();
-  if (!response) return null;
-  const data = response.notification.request.content.data;
-  if (data?.type === 'ride_offer' || data?.type === 'delivery_offer') {
-    return data;
+  try {
+    const response = await Notifications.getLastNotificationResponseAsync();
+    if (!response) return null;
+    const data = response.notification.request.content.data;
+    if (data?.type === 'ride_offer' || data?.type === 'delivery_offer') {
+      return data;
+    }
+    return null;
+  } catch (e) {
+    console.warn('[notif] consumePendingJobOffer error:', e);
+    return null;
   }
-  return null;
 }
