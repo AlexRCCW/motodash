@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
+import MapMarkerPin from '../../components/MapMarkerPin';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
 import { requestLocationPermission, getCurrentLocation } from '../../services/locationService';
@@ -195,15 +196,19 @@ export default function ClientRideScreen({ navigation, route }) {
           <Marker
             coordinate={{ latitude: location.lat, longitude: location.lng }}
             title="You"
-            pinColor={colors.primary}
-          />
+            anchor={{ x: 0.5, y: 1 }}
+          >
+            <MapMarkerPin emoji="👤" />
+          </Marker>
         )}
         {job?.driver_lat && job?.driver_lng && (
           <Marker
             coordinate={{ latitude: job.driver_lat, longitude: job.driver_lng }}
             title="Driver"
-            pinColor={colors.textPrimary}
-          />
+            anchor={{ x: 0.5, y: 1 }}
+          >
+            <MapMarkerPin emoji="🏍️" />
+          </Marker>
         )}
       </MapView>
 
@@ -213,14 +218,17 @@ export default function ClientRideScreen({ navigation, route }) {
           <>
             <Text style={styles.panelTitle}>{t('clientRide.readyForRide').toUpperCase()}</Text>
             {!location ? (
-              <ActivityIndicator color={colors.primary} style={{ marginBottom: 16 }} />
+              <ActivityIndicator style={{ marginBottom: 16 }} />
             ) : null}
             <TouchableOpacity
-              style={[styles.primaryBtn, !location && styles.primaryBtnDisabled]}
+              style={[styles.primaryBtn, (!location || status === 'requesting') && styles.primaryBtnDisabled]}
               onPress={handleRequestRide}
-              disabled={!location}
+              disabled={!location || status === 'requesting'}
             >
-              <Text style={styles.primaryBtnText}>{t('clientRide.requestRide').toUpperCase()}</Text>
+              {status === 'requesting'
+                ? <ActivityIndicator color={colors.onDark} />
+                : <Text style={styles.primaryBtnText}>{t('clientRide.requestRide').toUpperCase()}</Text>
+              }
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.backBtn}
@@ -233,7 +241,7 @@ export default function ClientRideScreen({ navigation, route }) {
 
         {status === 'requesting' && (
           <View style={styles.centeredPanel}>
-            <ActivityIndicator size="large" color={colors.primary} />
+            <ActivityIndicator size="large" />
             <Text style={styles.statusText}>{t('clientRide.creatingRequest').toUpperCase()}</Text>
           </View>
         )}

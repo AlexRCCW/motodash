@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Alert, TextInput,
+  ActivityIndicator, Alert, TextInput, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
@@ -13,6 +13,9 @@ import {
   markDeliveryPaid,
   getReadyPreferredDrivers,
   dispatchJob,
+  notifyAssignedDriver,
+  notifyDriverUnassigned,
+  unassignDeliveryDriver,
   cancelDeliveryOrder,
 } from '../../services/jobService';
 import { colors, SlashDivider, radius } from '../../theme';
@@ -37,6 +40,7 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
 
   const [job,              setJob]              = useState(null);
   const [client,           setClient]           = useState(null);
+  const [assignedDriver,   setAssignedDriver]   = useState(null);
   const [preferredDrivers, setPreferredDrivers] = useState([]);
   const [itemStates,       setItemStates]       = useState({});  // { [idx]: 'pulled'|'unavailable'|null }
   const [orderTotal,       setOrderTotal]       = useState('');  // editable by store
@@ -44,6 +48,8 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
   const [loading,          setLoading]          = useState(true);
   const [submitting,       setSubmitting]       = useState(false);
   const [dispatching,      setDispatching]      = useState(false);
+  const [showCancelInput,  setShowCancelInput]  = useState(false);
+  const [cancelReason,     setCancelReason]     = useState('');
 
   const loadJob = useCallback(async () => {
     if (!jobId) return;
@@ -67,6 +73,18 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
       .rpc('get_order_client', { p_job_id: jobId });
     if (clientRows?.length > 0) {
       setClient({ name: clientRows[0].client_name, phone: clientRows[0].client_phone });
+    }
+
+    // Load assigned driver name when one is set
+    if (jobData.driver_id) {
+      const { data: dp } = await supabase
+        .from('driver_profiles')
+        .select('driver_name')
+        .eq('id', jobData.driver_id)
+        .single();
+      setAssignedDriver(dp?.driver_name ?? null);
+    } else {
+      setAssignedDriver(null);
     }
 
     // Load ready preferred drivers when order is accepted with no driver yet
@@ -100,6 +118,14 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
 
   // ── Item toggle ─────────────────────────────────────────────
 
+  function openClientWhatsApp() {
+    const digits = (client?.phone ?? '').replace(/\D/g, '');
+    if (!digits) return;
+    Linking.openURL(`whatsapp://send?phone=${digits}`).catch(() =>
+      Alert.alert('WhatsApp', 'WhatsApp is not installed on this device.')
+    );
+  }
+
   function toggleItemState(idx, state) {
     setItemStates(prev => ({
       ...prev,
@@ -115,15 +141,15 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
       Alert.alert(t('shared.error'), t('storeOrder.totalRequired'));
       return;
     }
+    setSubmitting(true);
     Alert.alert(
       t('storeOrder.readyForDelivery'),
       '',
       [
-        { text: t('shared.cancel'), style: 'cancel' },
+        { text: t('shared.cancel'), style: 'cancel', onPress: () => setSubmitting(false) },
         {
           text: t('storeOrder.yesMarkReady'),
           onPress: async () => {
-            setSubmitting(true);
             // Build updated items array — inject store prices into other items
             const updatedItems = (job?.items ?? []).map((item, idx) => {
               if (item.isOther && otherPrices[idx] != null) {
@@ -154,12 +180,46 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
           text: t('storeOrder.yesAssign'),
           onPress: async () => {
             setSubmitting(true);
-            const { error } = await assignPreferredDriver(jobId, driver.id);
+            const { data: assigned, error } = await assignPreferredDriver(jobId, driver.id);
             if (error) {
               Alert.alert(t('shared.error'), error.message);
             } else {
+              notifyAssignedDriver(jobId, driver.id).catch(e =>
+                console.error('notify-driver error:', e)
+              );
               await loadJob();
             }
+            setSubmitting(false);
+          },
+        },
+      ]
+    );
+  }
+
+  function handleReassign() {
+    Alert.alert(
+      t('storeOrder.reassignTitle'),
+      t('storeOrder.reassignConfirm'),
+      [
+        { text: t('shared.cancel'), style: 'cancel' },
+        {
+          text: t('storeOrder.yesReassign'),
+          style: 'destructive',
+          onPress: async () => {
+            setSubmitting(true);
+            const previousDriverId = job.driver_id;
+            const { error } = await unassignDeliveryDriver(jobId);
+            if (error) {
+              Alert.alert(t('shared.error'), error.message);
+              setSubmitting(false);
+              return;
+            }
+            if (previousDriverId) {
+              notifyDriverUnassigned(jobId, previousDriverId).catch(e =>
+                console.error('notify-unassign error:', e)
+              );
+            }
+            await loadJob();
             setSubmitting(false);
           },
         },
@@ -197,32 +257,25 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
   }
 
   function handleCancelOrder() {
-    Alert.prompt(
-      t('storeOrder.cancelReasonTitle'),
-      t('storeOrder.cancelReasonPlaceholder'),
-      [
-        { text: t('shared.cancel'), style: 'cancel' },
-        {
-          text:  t('storeOrder.yesCancelOrder'),
-          style: 'destructive',
-          onPress: async (reason) => {
-            if (!reason?.trim()) {
-              Alert.alert(t('shared.error'), 'Please enter a reason.');
-              return;
-            }
-            setSubmitting(true);
-            const { error } = await cancelDeliveryOrder(jobId, reason.trim());
-            if (error) {
-              Alert.alert(t('shared.error'), error.message);
-            } else {
-              await loadJob();
-            }
-            setSubmitting(false);
-          },
-        },
-      ],
-      'plain-text'
-    );
+    setCancelReason('');
+    setShowCancelInput(true);
+  }
+
+  async function submitCancelOrder() {
+    if (!cancelReason.trim()) {
+      Alert.alert(t('shared.error'), t('storeOrder.cancelEnterReason'));
+      return;
+    }
+    setShowCancelInput(false);
+    setSubmitting(true);
+    const { error } = await cancelDeliveryOrder(jobId, cancelReason.trim());
+    if (error) {
+      Alert.alert(t('shared.error'), error.message);
+    } else {
+      await loadJob();
+    }
+    setSubmitting(false);
+    setCancelReason('');
   }
 
   // ── Render helpers ───────────────────────────────────────────
@@ -414,8 +467,22 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
     // ── Accepted + driver assigned: en route ─────────────────
     if (status === 'accepted' && driver_id) {
       return (
-        <View style={styles.statusInfoBox}>
-          <Text style={styles.statusInfoText}>{t('storeOrder.driverEnRoute').toUpperCase()}</Text>
+        <View style={{ gap: 10 }}>
+          <View style={styles.statusInfoBox}>
+            <Text style={styles.statusInfoText}>{t('storeOrder.driverEnRoute').toUpperCase()}</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.cancelOrderBtn, submitting && styles.primaryBtnDisabled]}
+            onPress={handleReassign}
+            disabled={submitting}
+          >
+            {submitting
+              ? <ActivityIndicator color={colors.primary} />
+              : <Text style={styles.cancelOrderBtnText}>
+                  {t('storeOrder.reassignDriver').toUpperCase()}
+                </Text>
+            }
+          </TouchableOpacity>
         </View>
       );
     }
@@ -504,6 +571,12 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
 
+        {/* Order ID */}
+        <View style={styles.orderIdRow}>
+          <Text style={styles.orderIdLabel}>{t('storeOrder.orderLabel').toUpperCase()}</Text>
+          <Text style={styles.orderIdValue}>#{job.id.slice(-8).toUpperCase()}</Text>
+        </View>
+
         {/* Client info */}
         <View style={styles.card}>
           <View style={styles.clientRow}>
@@ -514,7 +587,9 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
             <>
               <View style={styles.clientRow}>
                 <Text style={styles.cardLabel}>{t('storeOrder.phone').toUpperCase()}</Text>
-                <Text style={styles.clientPhone}>{client.phone}</Text>
+                <TouchableOpacity onPress={openClientWhatsApp}>
+                  <Text style={[styles.clientPhone, styles.clientPhoneLink]}>{client.phone}</Text>
+                </TouchableOpacity>
               </View>
               {job?.status === 'pending' && (
                 <Text style={styles.callHint}>
@@ -522,6 +597,12 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
                 </Text>
               )}
             </>
+          )}
+          {assignedDriver && (
+            <View style={[styles.clientRow, { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }]}>
+              <Text style={styles.cardLabel}>{t('storeOrder.driver').toUpperCase()}</Text>
+              <Text style={styles.clientName}>{assignedDriver}</Text>
+            </View>
           )}
         </View>
 
@@ -554,6 +635,42 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
             </Text>
           )}
         </View>
+
+        {/* Inline cancel reason input */}
+        {showCancelInput && (
+          <View style={styles.cancelInputCard}>
+            <Text style={styles.cancelInputLabel}>
+              {t('storeOrder.cancelReasonTitle')}
+            </Text>
+            <TextInput
+              style={styles.cancelInputField}
+              placeholder={t('storeOrder.cancelReasonPlaceholder')}
+              placeholderTextColor={colors.textSecondary}
+              value={cancelReason}
+              onChangeText={setCancelReason}
+              multiline
+              autoFocus
+            />
+            <View style={styles.cancelInputRow}>
+              <TouchableOpacity
+                style={styles.cancelInputDismiss}
+                onPress={() => setShowCancelInput(false)}
+              >
+                <Text style={styles.cancelInputDismissText}>
+                  {t('shared.cancel').toUpperCase()}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.cancelInputConfirm}
+                onPress={submitCancelOrder}
+              >
+                <Text style={styles.cancelInputConfirmText}>
+                  {(t('storeOrder.yesCancelOrder') || 'Cancel Order').toUpperCase()}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* Action area */}
         <View style={styles.actionArea}>
@@ -590,6 +707,26 @@ const styles = StyleSheet.create({
   scroll:        { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 40 },
 
+  orderIdRow: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    justifyContent: 'space-between',
+    marginBottom:   12,
+  },
+  orderIdLabel: {
+    fontSize:      11,
+    fontWeight:    '500',
+    color:         colors.textSecondary,
+    letterSpacing:  1.5,
+  },
+  orderIdValue: {
+    fontSize:      13,
+    fontWeight:    '600',
+    color:         colors.textPrimary,
+    letterSpacing:  1,
+    fontVariant:   ['tabular-nums'],
+  },
+
   // Card
   card: {
     backgroundColor: colors.surface,
@@ -616,7 +753,8 @@ const styles = StyleSheet.create({
     marginBottom:   4,
   },
   clientName:  { fontSize: 15, fontWeight: '500', color: colors.textPrimary },
-  clientPhone: { fontSize: 15, color: colors.textPrimary },
+  clientPhone:     { fontSize: 15, color: colors.textPrimary },
+  clientPhoneLink: { color: colors.primary, textDecorationLine: 'underline' },
   callHint:    { fontSize: 13, color: colors.textSecondary, marginTop: 8, lineHeight: 18 },
 
   // Items
@@ -787,6 +925,64 @@ const styles = StyleSheet.create({
     fontSize:          14,
     color:             colors.textPrimary,
     backgroundColor:   colors.background,
+  },
+
+  // Inline cancel reason input
+  cancelInputCard: {
+    backgroundColor: colors.surface,
+    borderRadius:    radius.md,
+    borderWidth:     1,
+    borderColor:     colors.border,
+    padding:         14,
+    marginBottom:    12,
+  },
+  cancelInputLabel: {
+    fontSize:      12,
+    fontWeight:    '600',
+    color:         colors.textSecondary,
+    letterSpacing:  1,
+    textTransform: 'uppercase',
+    marginBottom:   8,
+  },
+  cancelInputField: {
+    borderWidth:       1,
+    borderColor:       colors.border,
+    borderRadius:      radius.sm,
+    padding:           10,
+    fontSize:          14,
+    color:             colors.textPrimary,
+    backgroundColor:   colors.background,
+    minHeight:         60,
+    textAlignVertical: 'top',
+    marginBottom:      10,
+  },
+  cancelInputRow:         { flexDirection: 'row', gap: 8 },
+  cancelInputDismiss: {
+    flex:            1,
+    paddingVertical: 11,
+    alignItems:      'center',
+    borderWidth:     1,
+    borderColor:     colors.border,
+    borderRadius:    radius.sm,
+  },
+  cancelInputDismissText: {
+    fontSize:      11,
+    fontWeight:    '600',
+    color:         colors.textSecondary,
+    letterSpacing:  1.5,
+  },
+  cancelInputConfirm: {
+    flex:            2,
+    paddingVertical: 11,
+    alignItems:      'center',
+    backgroundColor: colors.primary,
+    borderRadius:    radius.sm,
+  },
+  cancelInputConfirmText: {
+    fontSize:      11,
+    fontWeight:    '600',
+    color:         colors.onDark,
+    letterSpacing:  1.5,
   },
 
   // Cancel order button

@@ -2,14 +2,16 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
   TouchableOpacity, TextInput, Alert,
-  ActivityIndicator,
+  ActivityIndicator, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
+import MapMarkerPin from '../../components/MapMarkerPin';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../config/supabase';
-import { markDeliveryCompleteClient, cancelDeliveryOrder } from '../../services/jobService';
+import { markDeliveryCompleteClient, cancelDeliveryOrder, submitDriverRating, dispatchJob } from '../../services/jobService';
+import RatingModal from '../../components/RatingModal';
 import { useThemeColors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 import { showInterstitial } from '../../services/adService';
@@ -32,7 +34,10 @@ export default function ClientOrderScreen({ navigation, route }) {
   const [placing,     setPlacing]     = useState(false);
   const [job,         setJob]         = useState(resumedJob || null);
   const [storeName,   setStoreName]   = useState(store?.store_name ?? '');
+  const [storePhone,  setStorePhone]  = useState(store?.phone ?? '');
   const [completing,     setCompleting]     = useState(false);
+  const [showRating,     setShowRating]     = useState(false);
+  const ratingResolveRef = useRef(null);
   const [adShownWaiting, setAdShownWaiting] = useState(false);
   const [secondsWaiting, setSecondsWaiting] = useState(0);
   const [canceling,      setCanceling]      = useState(false);
@@ -40,16 +45,25 @@ export default function ClientOrderScreen({ navigation, route }) {
 
   const isPlaced = !!job;
 
-  // Fetch store name when resuming (store param won't be present)
+  // Fetch store name + phone when resuming (store param won't be present)
   useEffect(() => {
     const sid = job?.store_id ?? store?.id;
-    if (sid && !storeName) {
+    if (!sid) return;
+    if (!storeName) {
       supabase
         .from('store_profiles')
         .select('store_name')
         .eq('id', sid)
         .single()
         .then(({ data }) => { if (data) setStoreName(data.store_name); });
+    }
+    if (!storePhone) {
+      supabase
+        .from('accounts')
+        .select('phone')
+        .eq('id', sid)
+        .single()
+        .then(({ data }) => { if (data?.phone) setStorePhone(data.phone); });
     }
   }, [job?.store_id, store?.id]);
 
@@ -95,12 +109,12 @@ export default function ClientOrderScreen({ navigation, route }) {
 
   async function handlePlaceOrder() {
     if (!store || !clientLocation || !orderItems?.length) return;
+    setPlacing(true);
     await showInterstitial();
     await doPlaceOrder();
   }
 
   async function doPlaceOrder() {
-    setPlacing(true);
     const { data, error } = await supabase
       .from('delivery_jobs')
       .insert({
@@ -116,9 +130,8 @@ export default function ClientOrderScreen({ navigation, route }) {
       })
       .select()
       .single();
-    setPlacing(false);
-
     if (error || !data) {
+      setPlacing(false);
       Alert.alert(t('shared.error'), t('clientOrder.placeOrderError'));
       return;
     }
@@ -127,6 +140,8 @@ export default function ClientOrderScreen({ navigation, route }) {
     await AsyncStorage.setItem('open_job', 'true');
     await AsyncStorage.setItem('open_job_type', 'delivery');
     await AsyncStorage.setItem('open_job_id', data.id);
+    // Notify nearby drivers via Edge Function (fire-and-forget)
+    dispatchJob(data.id, 'delivery').catch(e => console.error('dispatch-job error:', e));
   }
 
   async function handleCancelOrder() {
@@ -157,6 +172,25 @@ export default function ClientOrderScreen({ navigation, route }) {
   async function handleMarkReceived() {
     setCompleting(true);
     await showInterstitial();
+
+    // Collect rating before marking complete
+    const ratingResult = await new Promise(resolve => {
+      ratingResolveRef.current = resolve;
+      setShowRating(true);
+    });
+
+    // Fire-and-forget — don't block the completion flow
+    if (job?.driver_id) {
+      submitDriverRating({
+        driverId:   job.driver_id,
+        clientId:   account.id,
+        rideJobId:  null,
+        rating:     ratingResult.rating,
+        comment:    ratingResult.comment,
+        isReport:   ratingResult.isReport,
+      }).catch(() => {});
+    }
+
     const { error } = await markDeliveryCompleteClient(job.id);
     if (error) {
       Alert.alert(t('shared.error'), t('clientOrder.completeOrderError'),
@@ -167,6 +201,19 @@ export default function ClientOrderScreen({ navigation, route }) {
     }
     await AsyncStorage.multiRemove(['open_job', 'open_job_type', 'open_job_id']);
     navigation.replace('ClientHome');
+  }
+
+  function handleRatingSubmit(result) {
+    setShowRating(false);
+    ratingResolveRef.current?.(result);
+  }
+
+  function openWhatsApp() {
+    if (!storePhone) return;
+    const digits = storePhone.replace(/\D/g, '');
+    Linking.openURL(`whatsapp://send?phone=${digits}`).catch(() => {
+      Alert.alert('WhatsApp not installed', 'Please install WhatsApp to contact the store.');
+    });
   }
 
   const currentStyle = STATUS_CONFIG[job?.status] || STATUS_CONFIG.pending;
@@ -193,10 +240,17 @@ export default function ClientOrderScreen({ navigation, route }) {
 
       <ScrollView contentContainerStyle={styles.content}>
 
-        {/* Store name */}
+        {/* Store name + phone */}
         <View style={styles.storeRow}>
           <Text style={styles.storeLabel}>{t('clientOrder.store').toUpperCase()}</Text>
-          <Text style={styles.storeName}>{storeName || '—'}</Text>
+          <View style={styles.storeNameCol}>
+            <Text style={styles.storeName}>{storeName || '—'}</Text>
+            {storePhone ? (
+              <TouchableOpacity onPress={openWhatsApp}>
+                <Text style={styles.storePhone}>{storePhone}</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
 
         {/* Status badge */}
@@ -233,16 +287,28 @@ export default function ClientOrderScreen({ navigation, route }) {
               <Marker
                 coordinate={{ latitude: job.store_lat, longitude: job.store_lng }}
                 title={storeName || 'Store'}
-                pinColor={colors.textPrimary}
-              />
+                anchor={{ x: 0.5, y: 1 }}
+              >
+                <MapMarkerPin emoji="🏪" />
+              </Marker>
               {job.client_lat && (
                 <Marker
                   coordinate={{ latitude: job.client_lat, longitude: job.client_lng }}
                   title="You"
-                  pinColor={colors.primary}
-                />
+                  anchor={{ x: 0.5, y: 1 }}
+                >
+                  <MapMarkerPin emoji="👤" />
+                </Marker>
               )}
             </MapView>
+          </View>
+        )}
+
+        {/* Order ID */}
+        {isPlaced && job?.id && (
+          <View style={styles.orderIdRow}>
+            <Text style={styles.orderIdLabel}>ORDER</Text>
+            <Text style={styles.orderIdValue}>#{job.id.slice(-8).toUpperCase()}</Text>
           </View>
         )}
 
@@ -375,6 +441,8 @@ export default function ClientOrderScreen({ navigation, route }) {
         )}
       </SafeAreaView>
 
+      <RatingModal visible={showRating} onSubmit={handleRatingSubmit} />
+
     </View>
   );
 }
@@ -398,15 +466,18 @@ const makeStyles = (colors) => StyleSheet.create({
 
   content: { padding: 16, paddingBottom: 24 },
 
-  storeRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  storeRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
   storeLabel:{
     fontSize:      11,
     color:         colors.textSecondary,
     fontWeight:    '500',
     letterSpacing:  1.5,
     textTransform: 'uppercase',
+    marginTop:     2,
   },
-  storeName: { fontSize: 15, fontWeight: '500', color: colors.textPrimary, flexShrink: 1, textAlign: 'right', maxWidth: '70%' },
+  storeNameCol: { alignItems: 'flex-end', flexShrink: 1, maxWidth: '70%' },
+  storeName: { fontSize: 15, fontWeight: '500', color: colors.textPrimary, textAlign: 'right' },
+  storePhone: { fontSize: 13, color: colors.primary, marginTop: 4, textDecorationLine: 'underline', textAlign: 'right' },
 
   statusBadge: {
     borderRadius:    radius.sm,
@@ -445,6 +516,26 @@ const makeStyles = (colors) => StyleSheet.create({
 
   mapContainer:{ height: 160, borderRadius: radius.md, overflow: 'hidden', marginBottom: 16 },
   map:         { flex: 1 },
+
+  orderIdRow: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    justifyContent: 'space-between',
+    marginBottom:   12,
+  },
+  orderIdLabel: {
+    fontSize:      11,
+    fontWeight:    '500',
+    color:         colors.textSecondary,
+    letterSpacing:  1.5,
+  },
+  orderIdValue: {
+    fontSize:      13,
+    fontWeight:    '600',
+    color:         colors.textPrimary,
+    letterSpacing:  1,
+    fontVariant:   ['tabular-nums'],
+  },
 
   sectionTitle: {
     fontSize:      11,

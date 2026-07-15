@@ -5,18 +5,19 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
+import MapMarkerPin from '../../components/MapMarkerPin';
 import { useAuth } from '../../context/AuthContext';
 import { requestLocationPermission, watchLocation, haversineMeters } from '../../services/locationService';
-import { markDeliveryCompleteDriver } from '../../services/jobService';
+import { markDeliveryCompleteDriver, notifyClientArrival } from '../../services/jobService';
+import { setupNotificationListeners } from '../../services/notificationService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useThemeColors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 import { showInterstitial } from '../../services/adService';
 
 // 300 ft — store pickup/return (GPS accuracy on mobile is rarely < 6m)
-const STORE_GEOFENCE_METERS  = 91.44;
-// 300 ft — client delivery (consistent with store radius)
-const CLIENT_GEOFENCE_METERS = 91.44;
+const STORE_GEOFENCE_METERS  = 60.96;
+const CLIENT_GEOFENCE_METERS = 60.96;
 
 // Delivery has 3 phases:
 // 1. 'to_store'     — driver heading to store
@@ -34,7 +35,9 @@ export default function DriverDeliveryScreen({ navigation, route }) {
   const [canAdvance, setCanAdvance]         = useState(false);
   const [completing, setCompleting]         = useState(false);
 
-  const stopWatchingRef = useRef(null);
+  const stopWatchingRef    = useRef(null);
+  const mapRef             = useRef(null);
+  const arrivalNotifiedRef = useRef(false);
   // Ref so the watchLocation callback always reads the latest phase
   // without a stale closure — plain state captured at subscription time
   // would stay stuck on 'to_store' forever.
@@ -63,7 +66,25 @@ export default function DriverDeliveryScreen({ navigation, route }) {
     });
 
     startLocationWatch();
-    return () => { if (stopWatchingRef.current) stopWatchingRef.current(); };
+
+    const cleanupNotifs = setupNotificationListeners({
+      onJobOffer: (data) => {
+        if (data?.type === 'delivery_unassigned' && data?.job_id === job.id) {
+          if (stopWatchingRef.current) stopWatchingRef.current();
+          AsyncStorage.multiRemove(['open_job', 'open_job_type', 'open_job_id', 'open_job_phase']);
+          Alert.alert(
+            t('driverDelivery.unassignedTitle'),
+            t('driverDelivery.unassignedMsg'),
+            [{ text: t('shared.ok'), onPress: () => navigation.reset({ index: 0, routes: [{ name: 'DriverHome' }] }) }]
+          );
+        }
+      },
+    });
+
+    return () => {
+      if (stopWatchingRef.current) stopWatchingRef.current();
+      cleanupNotifs();
+    };
   }, [job]);
 
   async function startLocationWatch() {
@@ -71,8 +92,30 @@ export default function DriverDeliveryScreen({ navigation, route }) {
     const stop = await watchLocation(loc => {
       setDriverLocation(loc);
       checkGeofence(loc);
+      const currentPhase = phaseRef.current;
+      const destCoord = (currentPhase === 'to_store' || currentPhase === 'return_store')
+        ? { latitude: job.store_lat, longitude: job.store_lng }
+        : { latitude: job.client_lat, longitude: job.client_lng };
+      if (currentPhase === 'to_client' && !arrivalNotifiedRef.current) {
+        const dist = haversineMeters(loc.lat, loc.lng, job.client_lat, job.client_lng);
+        if (dist <= 76.2) {
+          arrivalNotifiedRef.current = true;
+          notifyClientArrival(job.id, 'delivery').catch(() => {});
+        }
+      }
+      fitMap(loc, destCoord);
     });
     stopWatchingRef.current = stop;
+  }
+
+  function fitMap(driverLoc, destCoord) {
+    mapRef.current?.fitToCoordinates(
+      [
+        { latitude: driverLoc.lat, longitude: driverLoc.lng },
+        destCoord,
+      ],
+      { edgePadding: { top: 80, right: 80, bottom: 80, left: 80 }, animated: true }
+    );
   }
 
   function checkGeofence(loc) {
@@ -187,16 +230,12 @@ export default function DriverDeliveryScreen({ navigation, route }) {
 
       {/* Map */}
       <MapView
+        ref={mapRef}
         style={styles.map}
-        region={driverLocation ? {
-          latitude: driverLocation.lat,
-          longitude: driverLocation.lng,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        } : {
-          latitude: target.latitude,
-          longitude: target.longitude,
-          latitudeDelta: 0.02,
+        initialRegion={{
+          latitude:      target.latitude,
+          longitude:     target.longitude,
+          latitudeDelta:  0.02,
           longitudeDelta: 0.02,
         }}
       >
@@ -204,13 +243,21 @@ export default function DriverDeliveryScreen({ navigation, route }) {
           <Marker
             coordinate={{ latitude: driverLocation.lat, longitude: driverLocation.lng }}
             title="You"
-            pinColor={colors.primary}
-          />
+            anchor={{ x: 0.5, y: 1 }}
+          >
+            <MapMarkerPin emoji="🏍️" />
+          </Marker>
         )}
-        <Marker coordinate={target}
+        <Marker
+          coordinate={target}
           title={phase === 'to_client' ? 'Client' : 'Store'}
-          pinColor={colors.textPrimary}
-        />
+          anchor={{ x: 0.5, y: 1 }}
+        >
+          <MapMarkerPin
+            emoji={phase === 'to_client' ? '👤' : '🏪'}
+           
+          />
+        </Marker>
       </MapView>
 
       {/* Info panel */}
@@ -219,9 +266,13 @@ export default function DriverDeliveryScreen({ navigation, route }) {
         {/* Order summary */}
         <View style={styles.orderRow}>
           <View style={styles.orderItem}>
+            <Text style={styles.infoLabel}>{t('driverDelivery.orderLabel').toUpperCase()}</Text>
+            <Text style={styles.infoValue}>#{job.id.slice(-8).toUpperCase()}</Text>
+          </View>
+          <View style={styles.orderItem}>
             <Text style={styles.infoLabel}>{t('driverDelivery.orderTotal').toUpperCase()}</Text>
             <Text style={styles.infoValue}>
-              {job.order_total ? `$${job.order_total}` : t('driverDelivery.tbd')}
+              {job.order_total != null ? `$${Number(job.order_total).toFixed(2)}` : t('driverDelivery.tbd')}
             </Text>
           </View>
           <View style={styles.orderItem}>
@@ -242,7 +293,7 @@ export default function DriverDeliveryScreen({ navigation, route }) {
         {phase === 'return_store' && (
           <View style={styles.paymentReminder}>
             <Text style={styles.paymentReminderText}>
-              {t('driverDelivery.collectPayment', { amount: job.order_total })}
+              {t('driverDelivery.collectPayment', { amount: job.order_total != null ? Number(job.order_total).toFixed(2) : '—' })}
             </Text>
           </View>
         )}

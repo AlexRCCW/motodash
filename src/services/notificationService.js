@@ -1,7 +1,10 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../config/supabase';
+
+const LAST_HANDLED_NOTIF_KEY = '__last_handled_notif_id__';
 
 // Job offer notifications are handled entirely in-app — suppress the banner
 // so the driver sees the offer card without an OS alert on top.
@@ -9,7 +12,7 @@ Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
     try {
       const type = notification?.request?.content?.data?.type;
-      const isJobOffer = type === 'ride_offer' || type === 'delivery_offer';
+      const isJobOffer = type === 'ride_offer' || type === 'delivery_offer' || type === 'delivery_assigned';
       console.log('[notif] handleNotification type:', type);
       return {
         shouldShowBanner: !isJobOffer,
@@ -92,7 +95,8 @@ export function setupNotificationListeners({ onJobOffer, onNotification }) {
     try {
       const data = notification?.request?.content?.data;
       console.log('[notif] foreground received:', JSON.stringify(data));
-      if (data?.type === 'ride_offer' || data?.type === 'delivery_offer') {
+      const isOffer = data?.type === 'ride_offer' || data?.type === 'delivery_offer' || data?.type === 'delivery_assigned';
+      if (isOffer) {
         onJobOffer && onJobOffer(data);
       } else {
         onNotification && onNotification(notification);
@@ -107,7 +111,8 @@ export function setupNotificationListeners({ onJobOffer, onNotification }) {
     try {
       const data = response?.notification?.request?.content?.data;
       console.log('[notif] response tap received:', JSON.stringify(data));
-      if (data?.type === 'ride_offer' || data?.type === 'delivery_offer') {
+      const isOffer = data?.type === 'ride_offer' || data?.type === 'delivery_offer' || data?.type === 'delivery_assigned';
+      if (isOffer) {
         onJobOffer && onJobOffer(data);
       }
     } catch (e) {
@@ -130,8 +135,13 @@ export async function consumePendingJobOffer() {
   try {
     const response = await Notifications.getLastNotificationResponseAsync();
     if (!response) return null;
+    const notifId = response.notification.request.identifier;
+    const lastHandled = await AsyncStorage.getItem(LAST_HANDLED_NOTIF_KEY);
+    if (lastHandled === notifId) return null; // already handled on a previous mount
     const data = response.notification.request.content.data;
-    if (data?.type === 'ride_offer' || data?.type === 'delivery_offer') {
+    const isOffer = data?.type === 'ride_offer' || data?.type === 'delivery_offer' || data?.type === 'delivery_assigned';
+    if (isOffer) {
+      await AsyncStorage.setItem(LAST_HANDLED_NOTIF_KEY, notifId);
       return data;
     }
     return null;

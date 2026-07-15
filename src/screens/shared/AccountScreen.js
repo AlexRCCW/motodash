@@ -22,9 +22,10 @@ export default function AccountScreen({ navigation }) {
   const [newPw,       setNewPw]       = useState('');
   const [confirmPw,   setConfirmPw]   = useState('');
   const [subscribed,  setSubscribed]  = useState(false);
-  const [savingPhone, setSavingPhone] = useState(false);
-  const [savingPw,    setSavingPw]    = useState(false);
-  const [restoring,   setRestoring]   = useState(false);
+  const [savingPhone,  setSavingPhone]  = useState(false);
+  const [savingPw,     setSavingPw]     = useState(false);
+  const [restoring,    setRestoring]    = useState(false);
+  const [deletingAcct, setDeletingAcct] = useState(false);
 
   useEffect(() => {
     isNoAdsActive().then(setSubscribed);
@@ -96,6 +97,38 @@ export default function AccountScreen({ navigation }) {
     );
   }
 
+  async function handleDeleteAccount() {
+    Alert.alert(
+      t('account.deleteTitle'),
+      t('account.deleteMsg'),
+      [
+        { text: t('shared.cancel'), style: 'cancel' },
+        {
+          text: t('account.deleteConfirm'),
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingAcct(true);
+            try {
+              // Delete all user data from accounts table (cascade handles related rows)
+              const { error: dbError } = await supabase
+                .from('accounts')
+                .delete()
+                .eq('id', account.id);
+              if (dbError) throw dbError;
+              // Delete the auth user
+              const { error: authError } = await supabase.rpc('delete_own_account');
+              if (authError) throw authError;
+              await supabase.auth.signOut();
+            } catch (e) {
+              setDeletingAcct(false);
+              Alert.alert(t('shared.error'), e?.message ?? t('account.deleteError'));
+            }
+          },
+        },
+      ]
+    );
+  }
+
   const modeLabel = { auto: t('account.modeAuto'), light: t('account.modeLight'), dark: t('account.modeDark') };
 
   return (
@@ -115,7 +148,7 @@ export default function AccountScreen({ navigation }) {
         <View style={styles.card}>
           <Row label={t('account.email')} value={account?.email ?? '—'} colors={colors} />
           <Row label={t('account.type')}  value={account?.account_type ?? '—'} colors={colors} />
-          <Row label={t('account.name')}  value={account?.full_name ?? '—'}   colors={colors} />
+          <Row label={t('account.name')}  value={account?.name ?? '—'}   colors={colors} />
         </View>
 
         {/* ── Phone ── */}
@@ -238,6 +271,22 @@ export default function AccountScreen({ navigation }) {
           <Text style={styles.modeHint}>{t('account.modeAutoHint')}</Text>
         </View>
 
+        {/* ── Delete account ── */}
+        <Text style={styles.sectionTitle}>{t('account.dangerZone').toUpperCase()}</Text>
+        <View style={styles.card}>
+          <Text style={styles.deleteHint}>{t('account.deleteHint')}</Text>
+          <TouchableOpacity
+            style={[styles.btn, styles.btnDeleteAccount, deletingAcct && styles.btnDisabled]}
+            onPress={handleDeleteAccount}
+            disabled={deletingAcct}
+          >
+            {deletingAcct
+              ? <ActivityIndicator color="#c0392b" />
+              : <Text style={styles.btnTextDelete}>{t('account.deleteAccount').toUpperCase()}</Text>
+            }
+          </TouchableOpacity>
+        </View>
+
         <View style={{ height: 40 }} />
       </ScrollView>
     </View>
@@ -315,4 +364,8 @@ const makeStyles = (colors) => StyleSheet.create({
   modeBtnText:      { fontSize: 11, fontWeight: '500', color: colors.textSecondary, letterSpacing: 1 },
   modeBtnTextActive:{ color: colors.onDark },
   modeHint: { fontSize: 11, color: colors.textSecondary, marginTop: 10, lineHeight: 16 },
+
+  deleteHint:       { fontSize: 13, color: colors.textSecondary, lineHeight: 18, marginBottom: 4 },
+  btnDeleteAccount: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#c0392b' },
+  btnTextDelete:    { fontSize: 12, fontWeight: '600', color: '#c0392b', letterSpacing: 1.5 },
 });

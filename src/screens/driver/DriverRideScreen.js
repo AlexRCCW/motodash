@@ -5,16 +5,17 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
+import MapMarkerPin from '../../components/MapMarkerPin';
 import { useAuth } from '../../context/AuthContext';
 import { requestLocationPermission, watchLocation, haversineMeters } from '../../services/locationService';
-import { markRideCompleteDriver } from '../../services/jobService';
+import { markRideCompleteDriver, notifyClientArrival } from '../../services/jobService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useThemeColors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 import { showInterstitial } from '../../services/adService';
 
 // 300 ft — matches real-world GPS accuracy on mobile devices
-const CLIENT_GEOFENCE_METERS = 91.44;
+const CLIENT_GEOFENCE_METERS = 60.96;
 
 export default function DriverRideScreen({ navigation, route }) {
   const { account } = useAuth();
@@ -26,7 +27,9 @@ export default function DriverRideScreen({ navigation, route }) {
   const [canComplete, setCanComplete]       = useState(false);
   const [completing, setCompleting]         = useState(false);
 
-  const stopWatchingRef = useRef(null);
+  const stopWatchingRef    = useRef(null);
+  const mapRef             = useRef(null);
+  const arrivalNotifiedRef = useRef(false);
 
   useEffect(() => {
     if (!job) return;
@@ -45,13 +48,28 @@ export default function DriverRideScreen({ navigation, route }) {
   }, [job]);
 
   async function startLocationWatch() {
-    await requestLocationPermission(); // ensure permission before watching
+    await requestLocationPermission();
     const stop = await watchLocation(loc => {
       setDriverLocation(loc);
       const dist = haversineMeters(loc.lat, loc.lng, job.client_lat, job.client_lng);
       setCanComplete(dist <= CLIENT_GEOFENCE_METERS);
+      if (dist <= 76.2 && !arrivalNotifiedRef.current) {
+        arrivalNotifiedRef.current = true;
+        notifyClientArrival(job.id, 'ride').catch(() => {});
+      }
+      fitMap(loc, { latitude: job.client_lat, longitude: job.client_lng });
     });
     stopWatchingRef.current = stop;
+  }
+
+  function fitMap(driverLoc, destCoord) {
+    mapRef.current?.fitToCoordinates(
+      [
+        { latitude: driverLoc.lat, longitude: driverLoc.lng },
+        destCoord,
+      ],
+      { edgePadding: { top: 80, right: 80, bottom: 80, left: 80 }, animated: true }
+    );
   }
 
   async function handleMarkComplete() {
@@ -59,7 +77,11 @@ export default function DriverRideScreen({ navigation, route }) {
     setCompleting(true);
     await showInterstitial();
 
-    const { error } = await markRideCompleteDriver(job.id);
+    const { error } = await markRideCompleteDriver(
+      job.id,
+      driverLocation?.lat,
+      driverLocation?.lng,
+    );
 
     if (error) {
       Alert.alert(
@@ -102,16 +124,12 @@ export default function DriverRideScreen({ navigation, route }) {
 
       {/* Map */}
       <MapView
+        ref={mapRef}
         style={styles.map}
-        region={driverLocation ? {
-          latitude: driverLocation.lat,
-          longitude: driverLocation.lng,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        } : {
-          latitude: job.client_lat,
-          longitude: job.client_lng,
-          latitudeDelta: 0.02,
+        initialRegion={{
+          latitude:      job.client_lat,
+          longitude:     job.client_lng,
+          latitudeDelta:  0.02,
           longitudeDelta: 0.02,
         }}
       >
@@ -119,14 +137,18 @@ export default function DriverRideScreen({ navigation, route }) {
           <Marker
             coordinate={{ latitude: driverLocation.lat, longitude: driverLocation.lng }}
             title="You"
-            pinColor={colors.primary}
-          />
+            anchor={{ x: 0.5, y: 1 }}
+          >
+            <MapMarkerPin emoji="🏍️" />
+          </Marker>
         )}
         <Marker
           coordinate={{ latitude: job.client_lat, longitude: job.client_lng }}
           title="Client"
-          pinColor={colors.textPrimary}
-        />
+          anchor={{ x: 0.5, y: 1 }}
+        >
+          <MapMarkerPin emoji="👤" />
+        </Marker>
       </MapView>
 
       {/* Info panel */}

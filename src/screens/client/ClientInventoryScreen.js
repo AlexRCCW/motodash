@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList,
-  TouchableOpacity, ActivityIndicator, Alert,
+  TouchableOpacity, ActivityIndicator, Alert, Image,
+  TextInput, Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../config/supabase';
@@ -14,10 +15,12 @@ export default function ClientInventoryScreen({ navigation, route }) {
   const { store, clientLocation } = route.params;
   const { colors } = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [items,      setItems]      = useState([]);
-  const [order,      setOrder]      = useState({});          // { itemId: qty }
-  const [otherItems, setOtherItems] = useState([]);          // [{ id, name }]
-  const [loading,    setLoading]    = useState(true);
+  const [items,        setItems]        = useState([]);
+  const [order,        setOrder]        = useState({});          // { itemId: qty }
+  const [otherItems,   setOtherItems]   = useState([]);          // [{ id, name }]
+  const [loading,      setLoading]      = useState(true);
+  const [otherInput,   setOtherInput]   = useState('');
+  const [showOtherInput, setShowOtherInput] = useState(false);
 
   useEffect(() => { loadItems(); }, []);
 
@@ -52,27 +55,27 @@ export default function ClientInventoryScreen({ navigation, route }) {
       Alert.alert(t('shared.error'), t('clientInventory.maxOtherItems'));
       return;
     }
-    Alert.prompt(
-      t('clientInventory.addOtherItem'),
-      '',
-      [
-        { text: t('shared.cancel'), style: 'cancel' },
-        {
-          text: t('shared.ok'),
-          onPress: (name) => {
-            if (name?.trim()) {
-              setOtherItems(prev => [
-                ...prev,
-                { id: `other_${Date.now()}_${Math.random()}`, name: name.trim() },
-              ]);
-            }
-          },
-        },
-      ],
-      'plain-text',
-      '',
-      'default'
-    );
+    setOtherInput('');
+    setShowOtherInput(true);
+  }
+
+  function confirmOtherItem() {
+    const name = otherInput.trim();
+    if (name) {
+      setOtherItems(prev => [
+        ...prev,
+        { id: `other_${Date.now()}_${Math.random()}`, name },
+      ]);
+    }
+    setOtherInput('');
+    setShowOtherInput(false);
+    Keyboard.dismiss();
+  }
+
+  function cancelOtherItem() {
+    setOtherInput('');
+    setShowOtherInput(false);
+    Keyboard.dismiss();
   }
 
   function removeOtherItem(id) {
@@ -128,6 +131,11 @@ export default function ClientInventoryScreen({ navigation, route }) {
 
     return (
       <View style={[styles.itemRow, outOfStock && styles.itemRowDimmed]}>
+        {item.image_url ? (
+          <Image source={{ uri: item.image_url }} style={styles.itemThumb} />
+        ) : (
+          <View style={styles.itemThumbPlaceholder} />
+        )}
         <View style={styles.itemInfo}>
           <Text style={styles.itemName}>{item.name}</Text>
           <Text style={styles.itemPrice}>${Number(item.price).toFixed(2)}</Text>
@@ -178,17 +186,38 @@ export default function ClientInventoryScreen({ navigation, route }) {
         </>
       )}
 
-      {/* ── Add other item button ── */}
-      <TouchableOpacity
-        style={[
-          styles.addOtherBtn,
-          otherItems.length >= MAX_OTHER_ITEMS && styles.addOtherBtnDisabled,
-        ]}
-        onPress={addOtherItem}
-        disabled={otherItems.length >= MAX_OTHER_ITEMS}
-      >
-        <Text style={styles.addOtherBtnText}>{t('clientInventory.addOtherItem').toUpperCase()}</Text>
-      </TouchableOpacity>
+      {/* ── Add other item ── */}
+      {showOtherInput ? (
+        <View style={styles.otherInputRow}>
+          <TextInput
+            style={styles.otherInputField}
+            value={otherInput}
+            onChangeText={setOtherInput}
+            placeholder={t('clientInventory.addOtherItem')}
+            placeholderTextColor={colors.textSecondary}
+            autoFocus
+            returnKeyType="done"
+            onSubmitEditing={confirmOtherItem}
+          />
+          <TouchableOpacity style={styles.otherInputConfirm} onPress={confirmOtherItem}>
+            <Text style={styles.otherInputConfirmText}>{t('shared.ok').toUpperCase()}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.otherInputCancel} onPress={cancelOtherItem}>
+            <Text style={styles.otherInputCancelText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <TouchableOpacity
+          style={[
+            styles.addOtherBtn,
+            otherItems.length >= MAX_OTHER_ITEMS && styles.addOtherBtnDisabled,
+          ]}
+          onPress={addOtherItem}
+          disabled={otherItems.length >= MAX_OTHER_ITEMS}
+        >
+          <Text style={styles.addOtherBtnText}>{t('clientInventory.addOtherItem').toUpperCase()}</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 
@@ -279,8 +308,20 @@ const makeStyles = (colors) => StyleSheet.create({
   heroBackText: { fontSize: 11, fontWeight: '500', color: colors.mutedOnDark, letterSpacing: 1.5 },
 
   list:          { padding: 16, paddingBottom: 8 },
-  itemRow:       { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderColor: colors.border },
+  itemRow:       { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.border, gap: 12 },
   itemRowDimmed: { opacity: 0.5 },
+  itemThumb: {
+    width:        52,
+    height:       52,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surface,
+  },
+  itemThumbPlaceholder: {
+    width:        52,
+    height:       52,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surface,
+  },
   itemInfo:      { flex: 1 },
   itemName:      { fontSize: 15, fontWeight: '500', color: colors.textPrimary },
   itemPrice:     { fontSize: 14, color: colors.primary, marginTop: 3, fontWeight: '500' },
@@ -355,6 +396,50 @@ const makeStyles = (colors) => StyleSheet.create({
     alignItems:   'center',
   },
   addOtherBtnDisabled: { borderColor: colors.border, opacity: 0.5 },
+
+  otherInputRow: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    marginTop:      16,
+    marginBottom:   8,
+    gap:            8,
+  },
+  otherInputField: {
+    flex:            1,
+    height:          44,
+    borderWidth:     1,
+    borderColor:     colors.primary,
+    borderRadius:    radius.md,
+    paddingHorizontal: 12,
+    fontSize:        14,
+    color:           colors.textPrimary,
+    backgroundColor: colors.surface,
+  },
+  otherInputConfirm: {
+    height:          44,
+    paddingHorizontal: 14,
+    borderRadius:    radius.md,
+    backgroundColor: colors.primary,
+    justifyContent:  'center',
+    alignItems:      'center',
+  },
+  otherInputConfirmText: {
+    color:      colors.onDark,
+    fontSize:   11,
+    fontWeight: '500',
+    letterSpacing: 1,
+  },
+  otherInputCancel: {
+    width:           36,
+    height:          44,
+    borderRadius:    radius.md,
+    borderWidth:     1,
+    borderColor:     colors.border,
+    justifyContent:  'center',
+    alignItems:      'center',
+  },
+  otherInputCancelText: { color: colors.textSecondary, fontSize: 14 },
+
   addOtherBtnText: {
     color:         colors.primary,
     fontSize:      11,

@@ -42,10 +42,15 @@ export async function getRideJob(jobId) {
   return { data, error };
 }
 
-export async function markRideCompleteDriver(jobId) {
+export async function markRideCompleteDriver(jobId, completionLat, completionLng) {
+  const fields = { driver_complete: true, status: 'complete' };
+  if (completionLat != null && completionLng != null) {
+    fields.completion_lat = completionLat;
+    fields.completion_lng = completionLng;
+  }
   const { error } = await supabase
     .from('ride_jobs')
-    .update({ driver_complete: true, status: 'complete' })
+    .update(fields)
     .eq('id', jobId);
   return { error };
 }
@@ -409,8 +414,36 @@ export async function getDriverAverageRating(driverId) {
  * Finds nearby available drivers and sends them an Expo push notification.
  * Fire-and-forget: call without await so it never delays the UI.
  */
-export function dispatchJob(jobId, jobType) {
+export function dispatchJob(jobId, jobType, excludeDriverIds = []) {
   return supabase.functions.invoke('dispatch-job', {
+    body: { job_id: jobId, job_type: jobType, exclude_driver_ids: excludeDriverIds },
+  });
+}
+
+export function notifyAssignedDriver(jobId, driverId) {
+  return supabase.functions.invoke('notify-driver', {
+    body: { job_id: jobId, driver_id: driverId },
+  });
+}
+
+export function notifyClientArrival(jobId, jobType) {
+  return supabase.functions.invoke('notify-client-arrival', {
     body: { job_id: jobId, job_type: jobType },
   });
+}
+
+export function notifyDriverUnassigned(jobId, driverId) {
+  return supabase.functions.invoke('notify-driver', {
+    body: { job_id: jobId, driver_id: driverId, type: 'delivery_unassigned' },
+  });
+}
+
+export async function unassignDeliveryDriver(jobId) {
+  const { data, error } = await supabase
+    .from('delivery_jobs')
+    .update({ driver_id: null, driver_lat: null, driver_lng: null, status: 'accepted' })
+    .eq('id', jobId)
+    .select()
+    .single();
+  return { data, error };
 }

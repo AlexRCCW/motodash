@@ -79,6 +79,10 @@ export default {
       mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu',
       fri: 'Fri', sat: 'Sat', sun: 'Sun',
     },
+    phoneHint:    'Dominican Republic numbers only (809 · 829 · 849)',
+    phoneError:   'Enter a DR number — 809, 829, or 849 area code\nFormat: +1 (809) 555-1234',
+    phoneInvalid: 'Invalid Phone Number',
+    phoneInvalidMsg: 'Please enter a valid Dominican Republic number.\nExample: +1 (809) 555-1234',
   },
 
   // ── ACCOUNT STATUS ────────────────────────────────────────
@@ -250,6 +254,8 @@ export default {
     markReadyFirst: 'Mark yourself ready to see your location',
     putInRotation: "You are being put in the rotation for jobs",
     statusUpdateError: 'Could not update your status. Please try again.',
+    relocate:  'Moved to a new area to find jobs? Tap here to update your location.',
+    relocating: 'Updating location...',
   },
 
   // ── DRIVER RIDE ───────────────────────────────────────────
@@ -285,6 +291,9 @@ export default {
     gotIt: 'Got it',
     tbd: 'TBD',
     couldNotComplete: 'Could not mark delivery complete. Please try again.',
+    orderLabel:       'Order',
+    unassignedTitle:  'Delivery Reassigned',
+    unassignedMsg:    'The store has reassigned this delivery to another driver.',
   },
 
   // ── DRIVER STATS ──────────────────────────────────────────
@@ -393,6 +402,13 @@ export default {
     markPaid: 'Mark delivery paid',
     yesMarkPaid: 'Yes, mark paid',
     paid: 'Delivery paid ✓',
+    orderLabel:      'Order',
+    driver:          'Driver',
+    reassignTitle:   'Reassign Delivery',
+    reassignConfirm: 'This will unassign the current driver and let you pick a new one. The current driver will be notified.',
+    yesReassign:     'Reassign',
+    reassignDriver:  'Reassign Driver',
+    cancelEnterReason: 'Please enter a reason.',
   },
 
   // ── STORE ITEMS ───────────────────────────────────────────
@@ -497,6 +513,13 @@ export default {
     modeLight:        'Light',
     modeDark:         'Dark',
     modeAutoHint:     'Auto switches to dark mode after 7 PM.',
+    dangerZone:       'Danger Zone',
+    deleteHint:       'Permanently deletes your account and all associated data. This cannot be undone.',
+    deleteAccount:    'Delete Account',
+    deleteTitle:      'Delete Account',
+    deleteMsg:        'Are you sure? This will permanently delete your account and all data. This action cannot be undone.',
+    deleteConfirm:    'Delete',
+    deleteError:      'Could not delete account. Please contact support.',
   },
 
   // ── SUBSCRIPTION ──────────────────────────────────────────

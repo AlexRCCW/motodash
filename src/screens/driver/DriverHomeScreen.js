@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, Image,
+  Alert, ActivityIndicator, Image, Modal, Vibration,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
+import MapMarkerPin from '../../components/MapMarkerPin';
 import { useAuth }        from '../../context/AuthContext';
 import { logout }         from '../../services/authService';
 import { supabase }       from '../../config/supabase';
 import { requestLocationPermission, getCurrentLocation } from '../../services/locationService';
 import {
   setDriverReady, setDriverNotReady, incrementDriverRefusals,
-  acceptRideJob, acceptDeliveryJob, getDriverAverageRating,
+  acceptRideJob, acceptDeliveryJob, getDriverAverageRating, getDeliveryJob,
+  dispatchJob,
 } from '../../services/jobService';
 import { registerForPushNotifications, setupNotificationListeners, consumePendingJobOffer } from '../../services/notificationService';
 import { useThemeColors, SlashDivider, radius } from '../../theme';
@@ -32,11 +34,16 @@ export default function DriverHomeScreen({ navigation }) {
   const [jobOffer,    setJobOffer]    = useState(null);
   const [offerTimer,  setOfferTimer]  = useState(0);
   const [showAdMsg,   setShowAdMsg]   = useState(false);
-  const [avgRating,   setAvgRating]   = useState(null);
-  const [ratingCount, setRatingCount] = useState(0);
-  const timerRef = useRef(null);
-  const adResolveRef = useRef(null);
+  const [avgRating,    setAvgRating]    = useState(null);
+  const [ratingCount,  setRatingCount]  = useState(0);
+  const [strikes,      setStrikes]      = useState(0);
+  const [showRelocate, setShowRelocate] = useState(false);
+  const [relocating,   setRelocating]   = useState(false);
+  const timerRef        = useRef(null);
+  const adResolveRef    = useRef(null);
   const offerHandledRef = useRef(false);
+  const relocateTimerRef = useRef(null);
+  const waitingSinceRef  = useRef(null);
 
   useEffect(() => {
     offerHandledRef.current = false;
@@ -50,9 +57,16 @@ export default function DriverHomeScreen({ navigation }) {
     getDriverAverageRating(account.id).then(({ average, count }) => {
       if (average !== null) { setAvgRating(average); setRatingCount(count); }
     }).catch(() => {});
+    supabase.from('driver_profiles').select('consecutive_refusals').eq('id', account.id).single()
+      .then(({ data }) => { if (data) setStrikes(data.consecutive_refusals ?? 0); })
+      .catch(() => {});
 
     const cleanup = setupNotificationListeners({
       onJobOffer: (data) => {
+        if (data?.type === 'delivery_assigned') {
+          handleJobAssigned(data);
+          return;
+        }
         if (offerHandledRef.current) return;
         offerHandledRef.current = true;
         handleJobOffer(data);
@@ -62,7 +76,12 @@ export default function DriverHomeScreen({ navigation }) {
     // consumePendingJobOffer handles cold-launch taps (response listener
     // may not fire in time). The ref prevents double-handling.
     consumePendingJobOffer().then(data => {
-      if (data && !offerHandledRef.current) {
+      if (!data) return;
+      if (data.type === 'delivery_assigned') {
+        handleJobAssigned(data);
+        return;
+      }
+      if (!offerHandledRef.current) {
         offerHandledRef.current = true;
         handleJobOffer(data);
       }
@@ -71,6 +90,7 @@ export default function DriverHomeScreen({ navigation }) {
     return () => {
       cleanup();
       if (timerRef.current) clearInterval(timerRef.current);
+      if (relocateTimerRef.current) clearTimeout(relocateTimerRef.current);
     };
   }, [account?.id]);
 
@@ -120,7 +140,33 @@ export default function DriverHomeScreen({ navigation }) {
         setLocation({ lat: profile.last_known_lat, lng: profile.last_known_lng });
       }
       setStatus('waiting');
+      startRelocateTimer();
+      // Silently refresh location after completing a job — driver may have moved
+      getCurrentLocation().then(loc => {
+        if (!loc) return;
+        setLocation(loc);
+        supabase.from('driver_profiles').update({
+          last_known_lat: loc.lat,
+          last_known_lng: loc.lng,
+          location_updated_at: new Date().toISOString(),
+        }).eq('id', account.id).then(() => {});
+      }).catch(() => {});
     }
+  }
+
+  function startRelocateTimer() {
+    if (relocateTimerRef.current) clearTimeout(relocateTimerRef.current);
+    setShowRelocate(false);
+    waitingSinceRef.current = Date.now();
+    relocateTimerRef.current = setTimeout(() => {
+      setShowRelocate(true);
+    }, 30 * 60 * 1000);
+  }
+
+  function resetRelocateTimer() {
+    if (relocateTimerRef.current) clearTimeout(relocateTimerRef.current);
+    setShowRelocate(false);
+    startRelocateTimer();
   }
 
   function renderRatingBadge() {
@@ -128,6 +174,21 @@ export default function DriverHomeScreen({ navigation }) {
     return (
       <Text style={s.ratingBadge}>★ {avgRating.toFixed(1)}  ·  {ratingCount} {ratingCount === 1 ? 'rating' : 'ratings'}</Text>
     );
+  }
+
+  // ── Store-assigned delivery — skip offer card, auto-navigate ─
+
+  async function handleJobAssigned(data) {
+    if (!data?.job_id) return;
+    const { data: job, error } = await getDeliveryJob(data.job_id);
+    if (error || !job) {
+      Alert.alert(t('shared.error'), t('driverHome.jobTaken'));
+      return;
+    }
+    setStrikes(0);
+    supabase.from('driver_profiles').update({ consecutive_refusals: 0 }).eq('id', account.id).then(() => {});
+    await requestLocationPermission();
+    navigation.navigate('DriverDelivery', { job });
   }
 
   // ── Job offer ────────────────────────────────────────────────
@@ -138,14 +199,19 @@ export default function DriverHomeScreen({ navigation }) {
         console.warn('handleJobOffer: invalid payload', JSON.stringify(data));
         return;
       }
+      resetRelocateTimer();
+      Vibration.vibrate([0, 400, 150, 400, 150, 400]);
       if (timerRef.current) clearInterval(timerRef.current);
       setJobOffer(data);
-      setOfferTimer(OFFER_TIMEOUT);
+      let countdown = OFFER_TIMEOUT;
+      setOfferTimer(countdown);
       timerRef.current = setInterval(() => {
-        setOfferTimer(prev => {
-          if (prev <= 1) { clearInterval(timerRef.current); handleRefuse(data); return 0; }
-          return prev - 1;
-        });
+        countdown -= 1;
+        setOfferTimer(countdown);
+        if (countdown <= 0) {
+          clearInterval(timerRef.current);
+          handleRefuse(data);
+        }
       }, 1000);
     } catch (e) {
       console.error('handleJobOffer error:', e);
@@ -157,9 +223,20 @@ export default function DriverHomeScreen({ navigation }) {
     setJobOffer(null);
     offerHandledRef.current = false;
     const { limitReached } = await incrementDriverRefusals(account.id).catch(() => ({ limitReached: false }));
+    setStrikes(prev => Math.min(prev + 1, 3));
     if (limitReached) {
       Alert.alert(t('driverHome.markedUnavailable'), t('driverHome.refusedTooMany'));
       setStatus('idle');
+      setStrikes(0);
+    }
+    // Try the next closest driver — exclude this one so they don't get re-offered
+    if (offer?.job_id && offer?.type) {
+      const jobType = offer.type === 'ride_offer' ? 'ride' : 'delivery';
+      const driverId = account?.id;
+      console.log('[dispatch] re-dispatching', jobType, offer.job_id, 'excluding', driverId);
+      dispatchJob(offer.job_id, jobType, driverId ? [driverId] : [])
+        .then(({ error }) => { if (error) console.error('[dispatch] re-dispatch error:', error); })
+        .catch(e => console.error('[dispatch] re-dispatch threw:', e));
     }
   }
 
@@ -170,6 +247,8 @@ export default function DriverHomeScreen({ navigation }) {
     clearInterval(timerRef.current);
     setJobOffer(null);
     offerHandledRef.current = false;
+    setStrikes(0);
+    supabase.from('driver_profiles').update({ consecutive_refusals: 0 }).eq('id', account.id).then(() => {});
     const loc = await getCurrentLocation();
     const args = { jobId: offer.job_id, driverId: account.id, driverLat: loc?.lat, driverLng: loc?.lng };
 if (offer.type === 'ride_offer') {
@@ -203,13 +282,34 @@ if (offer.type === 'ride_offer') {
     await showPlayable();
     const { error } = await setDriverReady(account.id, loc.lat, loc.lng);
     if (error) { Alert.alert(t('shared.error'), t('driverHome.statusUpdateError')); setStatus('idle'); return; }
+    setStrikes(0);
     setStatus('waiting');
+    startRelocateTimer();
   }
 
   async function handleGoOffline() {
+    if (relocateTimerRef.current) clearTimeout(relocateTimerRef.current);
+    setShowRelocate(false);
     await setDriverNotReady(account.id);
     setStatus('idle');
     setLocation(null);
+  }
+
+  async function handleRelocate() {
+    if (relocating) return;
+    setRelocating(true);
+    const loc = await getCurrentLocation().catch(() => null);
+    if (loc) {
+      setLocation(loc);
+      await supabase.from('driver_profiles').update({
+        last_known_lat: loc.lat,
+        last_known_lng: loc.lng,
+        location_updated_at: new Date().toISOString(),
+      }).eq('id', account.id);
+    }
+    setRelocating(false);
+    setShowRelocate(false);
+    startRelocateTimer();
   }
 
   async function handleSignOut() {
@@ -219,29 +319,38 @@ if (offer.type === 'ride_offer') {
 
   // ── Hero status copy ─────────────────────────────────────────
 
+  function renderStrikes() {
+    return (
+      <View style={s.strikesRow}>
+        {[0, 1, 2].map(i => {
+          const hit = i < strikes;
+          return (
+            <View key={i} style={[s.strikeCircle, hit && s.strikeCircleHit]}>
+              {hit && <Text style={s.strikeX}>✕</Text>}
+            </View>
+          );
+        })}
+      </View>
+    );
+  }
+
   function renderHeroStatus() {
     if (status === 'loading') {
       return (
         <View style={s.heroStatusRow}>
-          <ActivityIndicator color={colors.primary} size="small" />
+          <ActivityIndicator size="small" />
           <Text style={s.heroMuted}>{t('driverHome.gettingLocation').toUpperCase()}</Text>
         </View>
       );
     }
     if (status === 'waiting') {
       return (
-        <>
-          <View style={s.heroStatusRow}>
-            <View style={s.onlineDot} />
-            <Text style={s.heroOnline}>ONLINE</Text>
-          </View>
-          <Text style={s.heroWaiting}>{t('driverHome.waiting').toUpperCase()}</Text>
-          {location && (
-            <Text style={s.heroCoords}>
-              {location.lat.toFixed(5)}°  ·  {location.lng.toFixed(5)}°
-            </Text>
-          )}
-        </>
+        <View style={s.heroStatusRow}>
+          <View style={s.onlineDot} />
+          <Text style={s.heroOnline}>ONLINE</Text>
+          <View style={s.heroStatusSpacer} />
+          {renderStrikes()}
+        </View>
       );
     }
     return <Text style={s.heroOffline}>{t('driverHome.offline').toUpperCase()}</Text>;
@@ -250,31 +359,37 @@ if (offer.type === 'ride_offer') {
   // ── Job offer card ───────────────────────────────────────────
 
   function renderJobOffer() {
-    if (!jobOffer) return null;
     return (
-      <View style={s.offerWrap}>
-        <View style={s.offerCard}>
-          <View style={s.offerTopRow}>
-            <Text style={s.offerType}>
-              {jobOffer.type === 'ride_offer'
-                ? t('driverHome.rideOffer')
-                : t('driverHome.deliveryOffer')}
+      <Modal
+        visible={!!jobOffer}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+      >
+        <View style={s.offerModalBackdrop}>
+          <View style={s.offerCard}>
+            <View style={s.offerTopRow}>
+              <Text style={s.offerType}>
+                {jobOffer?.type === 'ride_offer'
+                  ? t('driverHome.rideOffer')
+                  : t('driverHome.deliveryOffer')}
+              </Text>
+              <Text style={s.offerTimerText}>{offerTimer}s</Text>
+            </View>
+            <Text style={s.offerDistance}>
+              {t('driverHome.kmAway', { distance: jobOffer?.distance != null ? parseFloat(jobOffer.distance).toFixed(1) : '?' })}
             </Text>
-            <Text style={s.offerTimerText}>{offerTimer}s</Text>
-          </View>
-          <Text style={s.offerDistance}>
-            {t('driverHome.kmAway', { distance: jobOffer.distance != null ? parseFloat(jobOffer.distance).toFixed(1) : '?' })}
-          </Text>
-          <View style={s.offerBtns}>
-            <TouchableOpacity style={s.declineBtn} onPress={() => handleRefuse(jobOffer)}>
-              <Text style={s.declineBtnText}>{t('driverHome.decline').toUpperCase()}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.acceptBtn} onPress={handleAccept}>
-              <Text style={s.acceptBtnText}>{t('driverHome.accept').toUpperCase()}</Text>
-            </TouchableOpacity>
+            <View style={s.offerBtns}>
+              <TouchableOpacity style={s.declineBtn} onPress={() => handleRefuse(jobOffer)}>
+                <Text style={s.declineBtnText}>{t('driverHome.decline').toUpperCase()}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.acceptBtn} onPress={handleAccept}>
+                <Text style={s.acceptBtnText}>{t('driverHome.accept').toUpperCase()}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </View>
+      </Modal>
     );
   }
 
@@ -288,6 +403,8 @@ if (offer.type === 'ride_offer') {
 
   return (
     <View style={s.root}>
+
+      {renderJobOffer()}
 
       <AdMessageOverlay
         visible={showAdMsg}
@@ -350,8 +467,10 @@ if (offer.type === 'ride_offer') {
           >
             <Marker
               coordinate={{ latitude: location.lat, longitude: location.lng }}
-              pinColor={colors.primary}
-            />
+              anchor={{ x: 0.5, y: 1 }}
+            >
+              <MapMarkerPin emoji="🏍️" />
+            </Marker>
           </MapView>
         ) : (
           <View style={s.mapPlaceholder}>
@@ -366,8 +485,6 @@ if (offer.type === 'ride_offer') {
           </View>
         )}
 
-        {/* Job offer floats over map */}
-        {renderJobOffer()}
       </View>
 
       {/* ── Footer action ── */}
@@ -378,9 +495,24 @@ if (offer.type === 'ride_offer') {
           </TouchableOpacity>
         )}
         {status === 'waiting' && (
-          <TouchableOpacity style={s.secondaryBtn} onPress={handleGoOffline}>
-            <Text style={s.secondaryBtnText}>{t('driverHome.goOffline').toUpperCase()}</Text>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity style={s.secondaryBtn} onPress={handleGoOffline}>
+              <Text style={s.secondaryBtnText}>{t('driverHome.goOffline').toUpperCase()}</Text>
+            </TouchableOpacity>
+            {showRelocate && (
+              <TouchableOpacity
+                style={s.relocateLink}
+                onPress={handleRelocate}
+                disabled={relocating}
+              >
+                <Text style={s.relocateLinkText}>
+                  {relocating
+                    ? t('driverHome.relocating')
+                    : t('driverHome.relocate')}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </>
         )}
         {status === 'loading' && (
           <View style={[s.primaryBtn, { opacity: 0.5 }]}>
@@ -419,42 +551,29 @@ const makeStyles = (colors) => StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical:   5,
     borderRadius:      radius.sm,
-    backgroundColor:  'rgba(255,255,255,0.07)',
+    backgroundColor:  'rgba(255,255,255,0.18)',
   },
   heroBtnText: {
     fontSize:      10,
-    fontWeight:    '500',
-    color:         colors.mutedOnDark,
+    fontWeight:    '600',
+    color:         '#FFFFFF',
     letterSpacing:  1.5,
   },
-  heroBtnRed:     { backgroundColor: 'rgba(192,57,43,0.18)' },
-  heroBtnRedText: { color: colors.primary },
+  heroBtnRed:     { backgroundColor: 'rgba(220,50,50,0.25)' },
+  heroBtnRedText: { color: '#FF5555' },
 
   heroStatus: {
     paddingHorizontal: 16,
     paddingBottom:      2,
-    gap:                3,
   },
-  heroStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  onlineDot:     { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.primary },
+  heroStatusRow:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  heroStatusSpacer: { flex: 1 },
+  onlineDot:        { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.primary },
   heroOnline: {
     fontSize:     12,
     fontWeight:   '500',
     color:        colors.primary,
     letterSpacing: 2,
-  },
-  heroWaiting: {
-    fontSize:     12,
-    color:        colors.mutedOnDark,
-    letterSpacing: 1.5,
-    marginTop:     1,
-  },
-  heroCoords: {
-    fontSize:      10,
-    color:         '#3d3d3d',
-    letterSpacing:  0.5,
-    marginTop:      5,
-    fontVariant:   ['tabular-nums'],
   },
   heroMuted: {
     fontSize:     12,
@@ -467,6 +586,26 @@ const makeStyles = (colors) => StyleSheet.create({
     fontWeight:    '500',
     color:         colors.mutedOnDark,
     letterSpacing:  2,
+  },
+  strikesRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
+  strikeCircle: {
+    width:        22,
+    height:       22,
+    borderRadius: 11,
+    borderWidth:   2,
+    borderColor:  'rgba(255,255,255,0.3)',
+    justifyContent: 'center',
+    alignItems:     'center',
+  },
+  strikeCircleHit: {
+    borderColor:     '#FF5555',
+    backgroundColor: 'rgba(220,50,50,0.2)',
+  },
+  strikeX: {
+    fontSize:   11,
+    fontWeight: '700',
+    color:      '#FF5555',
+    lineHeight: 14,
   },
   ratingBadge: {
     fontSize:      11,
@@ -492,11 +631,12 @@ const makeStyles = (colors) => StyleSheet.create({
   },
 
   // ── Job offer card ──
-  offerWrap: {
-    position: 'absolute',
-    bottom:   16,
-    left:     16,
-    right:    16,
+  offerModalBackdrop: {
+    flex:            1,
+    justifyContent:  'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    paddingHorizontal: 16,
+    paddingBottom:     40,
   },
   offerCard: {
     backgroundColor: colors.surface,
@@ -599,6 +739,19 @@ const makeStyles = (colors) => StyleSheet.create({
     fontSize:      13,
     fontWeight:    '500',
     letterSpacing:  2,
+  },
+
+  relocateLink: {
+    marginTop:  12,
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  relocateLinkText: {
+    fontSize:      12,
+    color:         colors.primary,
+    textAlign:     'center',
+    lineHeight:    18,
+    textDecorationLine: 'underline',
   },
 
   // ── Ad modal ──

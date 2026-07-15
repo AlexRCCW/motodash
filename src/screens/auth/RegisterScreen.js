@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, ActivityIndicator, Alert, Image,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform, Modal, FlatList,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -15,6 +15,45 @@ import { supabase } from '../../config/supabase';
 import { t } from '../../i18n';
 
 const ACCOUNT_TYPE_KEYS = ['client', 'driver', 'store'];
+
+const DR_AREA_CODES = ['809', '829', '849'];
+
+const COUNTRY_CODES = [
+  { code: '+1',   flag: '🇩🇴', name: 'DR / US / PR' },
+  { code: '+509', flag: '🇭🇹', name: 'Haiti'        },
+  { code: '+52',  flag: '🇲🇽', name: 'Mexico'       },
+  { code: '+57',  flag: '🇨🇴', name: 'Colombia'     },
+  { code: '+58',  flag: '🇻🇪', name: 'Venezuela'    },
+  { code: '+34',  flag: '🇪🇸', name: 'Spain'        },
+];
+
+// Format the local portion of the number (no country code)
+function formatLocal(raw, isNorthAmerica) {
+  const digits = raw.replace(/\D/g, '').slice(0, isNorthAmerica ? 10 : 12);
+  if (isNorthAmerica) {
+    const a = digits.slice(0, 3);
+    const b = digits.slice(3, 6);
+    const c = digits.slice(6, 10);
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `(${a}) ${b}`;
+    return `(${a}) ${b}-${c}`;
+  }
+  // Generic: group as XXX XXX XXXX
+  return digits.replace(/(\d{3})(?=\d)/g, '$1 ').trim();
+}
+
+function localDigits(localPhone) {
+  return localPhone.replace(/\D/g, '');
+}
+
+function isValidPhone(countryCode, local) {
+  const digits = localDigits(local);
+  if (countryCode === '+1') {
+    if (digits.length !== 10) return false;
+    return DR_AREA_CODES.includes(digits.slice(0, 3));
+  }
+  return digits.length >= 7;
+}
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
 const STORE_TYPES = [
@@ -39,10 +78,13 @@ export default function RegisterScreen({ navigation }) {
   const [parentScrollEnabled, setParentScrollEnabled] = useState(true);
 
   // Shared fields
-  const [name, setName]         = useState('');
-  const [phone, setPhone]       = useState('');
-  const [email, setEmail]       = useState('');
-  const [password, setPassword] = useState('');
+  const [name,           setName]           = useState('');
+  const [countryEntry,   setCountryEntry]   = useState(COUNTRY_CODES[0]);
+  const [localPhone,     setLocalPhone]     = useState('');
+  const [phoneTouched,   setPhoneTouched]   = useState(false);
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [email,          setEmail]          = useState('');
+  const [password,       setPassword]       = useState('');
 
   // Driver fields
   const [motorcycleType, setMotorcycleType]         = useState('');
@@ -184,8 +226,14 @@ export default function RegisterScreen({ navigation }) {
   // ── Submit ──────────────────────────────────────────────────
 
   async function handleRegister() {
-    if (!name || !phone || !email || !password) {
+    const phone = countryEntry.code + localDigits(localPhone);
+    if (!name || !localPhone || !email || !password) {
       Alert.alert(t('auth.missingFields'), t('auth.pleaseFillAll'));
+      return;
+    }
+    if (!isValidPhone(countryEntry.code, localPhone)) {
+      setPhoneTouched(true);
+      Alert.alert(t('register.phoneInvalid'), t('register.phoneInvalidMsg'));
       return;
     }
     if (accountType === 'driver' && (!motorcycleType || !cedulaNumber)) {
@@ -209,7 +257,7 @@ export default function RegisterScreen({ navigation }) {
 
     setLoading(true);
 
-    const base    = { name, phone, email, password, accountType, language: 'en' };
+    const base    = { name, phone: countryEntry.code + localDigits(localPhone), email, password, accountType, language: 'en' };
     const profile = accountType === 'driver'
       ? { motorcycleType, cedulaNumber, acceptsRides, acceptsDeliveries }
       : accountType === 'store'
@@ -291,8 +339,64 @@ export default function RegisterScreen({ navigation }) {
       <Text style={styles.sectionLabel}>{t('register.yourDetails')}</Text>
       <TextInput style={styles.input} placeholder={t('register.fullName')} placeholderTextColor="#999"
         value={name} onChangeText={setName} />
-      <TextInput style={styles.input} placeholder={t('register.phoneNumber')} placeholderTextColor="#999"
-        keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
+      <View style={[styles.phoneRow, phoneTouched && !isValidPhone(countryEntry.code, localPhone) && styles.phoneRowError]}>
+        <TouchableOpacity style={styles.countryBtn} onPress={() => setShowCountryPicker(true)}>
+          <Text style={styles.countryFlag}>{countryEntry.flag}</Text>
+          <Text style={styles.countryCode}>{countryEntry.code}</Text>
+          <Text style={styles.countryChevron}>▾</Text>
+        </TouchableOpacity>
+        <View style={styles.phoneDivider} />
+        <TextInput
+          style={styles.phoneInput}
+          placeholder={countryEntry.code === '+1' ? '(809) 555-1234' : 'Phone number'}
+          placeholderTextColor="#999"
+          keyboardType="number-pad"
+          value={localPhone}
+          onChangeText={text => {
+            const isNA = countryEntry.code === '+1';
+            const formatted = formatLocal(text, isNA);
+            setLocalPhone(formatted);
+            if (!phoneTouched && localDigits(formatted).length >= (isNA ? 10 : 7)) setPhoneTouched(true);
+          }}
+          onBlur={() => setPhoneTouched(true)}
+        />
+      </View>
+      {phoneTouched && !isValidPhone(countryEntry.code, localPhone) ? (
+        <Text style={styles.phoneError}>
+          {countryEntry.code === '+1' ? t('register.phoneError') : 'Enter a valid phone number'}
+        </Text>
+      ) : (
+        <Text style={styles.phoneHint}>
+          {countryEntry.code === '+1' ? t('register.phoneHint') : `${countryEntry.flag} ${countryEntry.name} ${countryEntry.code}`}
+        </Text>
+      )}
+
+      {/* Country code picker modal */}
+      <Modal visible={showCountryPicker} transparent animationType="fade" onRequestClose={() => setShowCountryPicker(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowCountryPicker(false)}>
+          <View style={styles.pickerSheet}>
+            <Text style={styles.pickerTitle}>Select Country Code</Text>
+            <FlatList
+              data={COUNTRY_CODES}
+              keyExtractor={item => item.code}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[styles.pickerRow, item.code === countryEntry.code && styles.pickerRowSelected]}
+                  onPress={() => {
+                    setCountryEntry(item);
+                    setLocalPhone('');
+                    setShowCountryPicker(false);
+                  }}
+                >
+                  <Text style={styles.pickerFlag}>{item.flag}</Text>
+                  <Text style={styles.pickerName}>{item.name}</Text>
+                  <Text style={styles.pickerCode}>{item.code}</Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
       <TextInput style={styles.input} placeholder={t('register.emailAddress')} placeholderTextColor="#999"
         keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail} />
       <TextInput style={styles.input} placeholder={t('auth.password')} placeholderTextColor="#999"
@@ -485,7 +589,74 @@ const styles = StyleSheet.create({
   fieldLabel:    { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 4 },
   fieldHint:     { fontSize: 13, color: '#6b7280', marginBottom: 10, lineHeight: 18 },
   warningText:   { fontSize: 13, color: '#d97706', marginBottom: 8, fontWeight: '500' },
-  input:         { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 14, fontSize: 16, marginBottom: 12, color: '#1a1a1a', backgroundColor: '#fafafa' },
+  input:         { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 14, fontSize: 16, marginBottom: 4, color: '#1a1a1a', backgroundColor: '#fafafa' },
+  inputError:    { borderColor: '#dc2626' },
+  phoneHint:     { fontSize: 12, color: '#6b7280', marginBottom: 10, marginTop: 2, marginLeft: 2 },
+  phoneError:    { fontSize: 12, color: '#dc2626', marginBottom: 10, marginTop: 2, marginLeft: 2, lineHeight: 18 },
+
+  // Phone row
+  phoneRow: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    borderWidth:      1,
+    borderColor:     '#ddd',
+    borderRadius:    10,
+    backgroundColor: '#fafafa',
+    marginBottom:     4,
+    overflow:        'hidden',
+  },
+  phoneRowError: { borderColor: '#dc2626' },
+  countryBtn: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    paddingHorizontal: 12,
+    paddingVertical:   14,
+    gap: 4,
+  },
+  countryFlag:    { fontSize: 20 },
+  countryCode:    { fontSize: 15, color: '#1a1a1a', fontWeight: '600' },
+  countryChevron: { fontSize: 10, color: '#6b7280', marginLeft: 2 },
+  phoneDivider:   { width: 1, height: '60%', backgroundColor: '#ddd' },
+  phoneInput: {
+    flex:       1,
+    paddingHorizontal: 12,
+    paddingVertical:   14,
+    fontSize:   16,
+    color:      '#1a1a1a',
+  },
+
+  // Country picker modal
+  modalOverlay: {
+    flex:            1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent:  'flex-end',
+  },
+  pickerSheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius:  16,
+    borderTopRightRadius: 16,
+    paddingTop:      16,
+    paddingBottom:   32,
+    maxHeight:       360,
+  },
+  pickerTitle: {
+    fontSize:    16,
+    fontWeight:  '700',
+    color:       '#1a1a1a',
+    textAlign:   'center',
+    marginBottom: 12,
+  },
+  pickerRow: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    paddingHorizontal: 20,
+    paddingVertical:   14,
+    gap:               12,
+  },
+  pickerRowSelected: { backgroundColor: '#eff6ff' },
+  pickerFlag:  { fontSize: 24 },
+  pickerName:  { flex: 1, fontSize: 15, color: '#1a1a1a' },
+  pickerCode:  { fontSize: 15, color: '#6b7280', fontWeight: '600' },
   button:        { backgroundColor: '#2563eb', borderRadius: 10, padding: 16, alignItems: 'center', marginTop: 24 },
   buttonDisabled:{ opacity: 0.5 },
   buttonText:    { color: '#fff', fontSize: 16, fontWeight: '600' },

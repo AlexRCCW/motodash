@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 
-const RC_API_KEY_IOS = 'appl_ZDEmDBEznvlBzqAyaTEcadLpKUL';
+const RC_API_KEY_IOS     = 'appl_ZDEmDBEznvlBzqAyaTEcadLpKUL';
+const RC_API_KEY_ANDROID = 'goog_XovABtwJjEaonOhdgbMVBfGytNT';
 const ENTITLEMENT_ID = 'no_ads';
 
 // Safe loader — returns null if the native module isn't compiled into this build yet
@@ -13,13 +14,13 @@ function getPurchases() {
 }
 
 export function configureRevenueCat() {
-  if (Platform.OS !== 'ios') return;
   const Purchases = getPurchases();
   if (!Purchases) return;
   try {
     const { LOG_LEVEL } = require('react-native-purchases');
     if (__DEV__) Purchases.setLogLevel(LOG_LEVEL.DEBUG);
-    Purchases.configure({ apiKey: RC_API_KEY_IOS });
+    const apiKey = Platform.OS === 'android' ? RC_API_KEY_ANDROID : RC_API_KEY_IOS;
+    Purchases.configure({ apiKey });
   } catch {}
 }
 
