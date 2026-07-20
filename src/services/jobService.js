@@ -98,12 +98,30 @@ export async function acceptDeliveryJob({ jobId, driverId, driverLat, driverLng 
   return { data, error };
 }
 
+// Called when driver arrives at client door and marks delivered
+export async function markDeliveredToClient(jobId) {
+  const { error } = await supabase
+    .from('delivery_jobs')
+    .update({ status: 'delivered' })
+    .eq('id', jobId);
+  return { error };
+}
+
+// Called when driver returns to store and completes their side
 export async function markDeliveryCompleteDriver(jobId) {
   const { error } = await supabase
     .from('delivery_jobs')
-    .update({ driver_complete: true, status: 'delivered' })
+    .update({ driver_complete: true })
     .eq('id', jobId);
   return { error };
+}
+
+// Sends a push notification to the client about delivery progress
+// type: 'picked_up' | 'delivered'
+export function notifyClientDeliveryUpdate(jobId, type) {
+  return supabase.functions.invoke('notify-client-delivery', {
+    body: { job_id: jobId, type },
+  });
 }
 
 export async function markDeliveryCompleteClient(jobId) {

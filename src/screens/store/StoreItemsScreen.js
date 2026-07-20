@@ -347,7 +347,7 @@ export default function StoreItemsScreen({ navigation }) {
       >
         <KeyboardAvoidingView
           style={styles.modalOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <View style={styles.modalSheet}>
             <Text style={styles.modalTitle}>
@@ -478,7 +478,7 @@ const styles = StyleSheet.create({
     gap:               8,
   },
   heroBackBtn:  { width: 60 },
-  heroBackText: { fontSize: 11, fontWeight: '500', color: colors.mutedOnDark, letterSpacing: 1.5 },
+  heroBackText: { fontSize: 11, fontWeight: '500', color: '#ffffff', letterSpacing: 1.5 },
   heroTitle:    { flex: 1, fontSize: 14, fontWeight: '500', color: colors.onDark, letterSpacing: 2 },
   addBtn: {
     backgroundColor:   colors.primary,

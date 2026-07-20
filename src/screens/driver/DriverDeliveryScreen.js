@@ -8,12 +8,14 @@ import MapView, { Marker } from 'react-native-maps';
 import MapMarkerPin from '../../components/MapMarkerPin';
 import { useAuth } from '../../context/AuthContext';
 import { requestLocationPermission, watchLocation, haversineMeters } from '../../services/locationService';
-import { markDeliveryCompleteDriver, notifyClientArrival } from '../../services/jobService';
+import { markDeliveryCompleteDriver, markDeliveredToClient, notifyClientDeliveryUpdate, notifyClientArrival } from '../../services/jobService';
 import { setupNotificationListeners } from '../../services/notificationService';
+import { supabase } from '../../config/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useThemeColors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 import { showInterstitial } from '../../services/adService';
+import AnimatedPressButton from '../../components/AnimatedPressButton';
 
 // 300 ft — store pickup/return (GPS accuracy on mobile is rarely < 6m)
 const STORE_GEOFENCE_METERS  = 60.96;
@@ -172,20 +174,30 @@ export default function DriverDeliveryScreen({ navigation, route }) {
     if (phase === 'to_store') {
       setPhase('to_client');
       setCanAdvance(false);
+      // Notify client their order has been picked up and is on the way
+      notifyClientDeliveryUpdate(job.id, 'picked_up').catch(() => {});
     } else if (phase === 'to_client') {
       // Show photo reminder before marking delivered
       Alert.alert(
         t('driverDelivery.takePhoto'),
         t('driverDelivery.takePhotoMsg'),
         [
-          { text: t('driverDelivery.gotIt'), onPress: () => setPhase('return_store') }
+          {
+            text: t('driverDelivery.gotIt'),
+            onPress: async () => {
+              setPhase('return_store');
+              // Update DB so client sees 'delivered' immediately via realtime
+              markDeliveredToClient(job.id).catch(() => {});
+              // Push notification to client
+              notifyClientDeliveryUpdate(job.id, 'delivered').catch(() => {});
+            },
+          }
         ]
       );
       setCanAdvance(false);
     } else if (phase === 'return_store') {
       if (stopWatchingRef.current) stopWatchingRef.current();
       setCompleting(true);
-      await showInterstitial();
 
       const { error } = await markDeliveryCompleteDriver(job.id);
 
@@ -200,6 +212,8 @@ export default function DriverDeliveryScreen({ navigation, route }) {
       }
 
       await AsyncStorage.multiRemove(['open_job', 'open_job_type', 'open_job_id', 'open_job_phase']);
+      supabase.from('driver_profiles').update({ ready_for_rides: true }).eq('id', account.id).then(() => {});
+      showInterstitial().catch(() => {});
       navigation.reset({ index: 0, routes: [{ name: 'DriverHome' }] });
     }
   }
@@ -302,13 +316,13 @@ export default function DriverDeliveryScreen({ navigation, route }) {
       {/* Action button */}
       <SafeAreaView style={styles.footer} edges={['bottom']}>
         {canAdvance ? (
-          <TouchableOpacity
+          <AnimatedPressButton
             style={[styles.advanceBtn, completing && { opacity: 0.6 }]}
             onPress={handleAdvance}
             disabled={completing}
           >
             <Text style={styles.advanceBtnText}>{getButtonLabel().toUpperCase()}</Text>
-          </TouchableOpacity>
+          </AnimatedPressButton>
         ) : (
           <View style={styles.waitingBtn}>
             <Text style={styles.waitingBtnText}>{getWaitingLabel().toUpperCase()}</Text>

@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { login } from '../../services/authService';
 import { colors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
+import AnimatedPressButton from '../../components/AnimatedPressButton';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail]       = useState('');
@@ -73,7 +74,7 @@ export default function LoginScreen({ navigation }) {
           onChangeText={setPassword}
         />
 
-        <TouchableOpacity
+        <AnimatedPressButton
           style={[styles.button, loading && styles.buttonDisabled]}
           onPress={handleLogin}
           disabled={loading}
@@ -82,7 +83,7 @@ export default function LoginScreen({ navigation }) {
             ? <ActivityIndicator color={colors.onDark} />
             : <Text style={styles.buttonText}>{t('auth.signIn').toUpperCase()}</Text>
           }
-        </TouchableOpacity>
+        </AnimatedPressButton>
 
         <TouchableOpacity style={styles.link} onPress={() => navigation.navigate('Register')}>
           <Text style={styles.linkText}>{t('auth.noAccount').toUpperCase()}</Text>

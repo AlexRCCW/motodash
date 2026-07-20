@@ -305,7 +305,7 @@ const makeStyles = (colors) => StyleSheet.create({
     textAlign: 'center',
   },
   heroBackBtn:  { width: 60 },
-  heroBackText: { fontSize: 11, fontWeight: '500', color: colors.mutedOnDark, letterSpacing: 1.5 },
+  heroBackText: { fontSize: 11, fontWeight: '500', color: '#ffffff', letterSpacing: 1.5 },
 
   list:          { padding: 16, paddingBottom: 8 },
   itemRow:       { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.border, gap: 12 },

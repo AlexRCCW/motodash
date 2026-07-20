@@ -7,10 +7,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
 import MapMarkerPin from '../../components/MapMarkerPin';
 import { useAuth } from '../../context/AuthContext';
-import { requestLocationPermission, watchLocation, haversineMeters } from '../../services/locationService';
+import { requestLocationPermission, watchLocation, haversineMeters, formatDistance } from '../../services/locationService';
 import { markRideCompleteDriver, notifyClientArrival } from '../../services/jobService';
+import { supabase } from '../../config/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useThemeColors, SlashDivider, radius } from '../../theme';
+import AnimatedPressButton from '../../components/AnimatedPressButton';
 import { t } from '../../i18n';
 import { showInterstitial } from '../../services/adService';
 
@@ -56,6 +58,10 @@ export default function DriverRideScreen({ navigation, route }) {
       if (dist <= 76.2 && !arrivalNotifiedRef.current) {
         arrivalNotifiedRef.current = true;
         notifyClientArrival(job.id, 'ride').catch(() => {});
+        // Update driver position on the job so the client's realtime subscription
+        // can compute proximity and unlock their Mark Complete button.
+        supabase.from('ride_jobs').update({ driver_lat: loc.lat, driver_lng: loc.lng })
+          .eq('id', job.id).then(() => {});
       }
       fitMap(loc, { latitude: job.client_lat, longitude: job.client_lng });
     });
@@ -94,6 +100,8 @@ export default function DriverRideScreen({ navigation, route }) {
     }
 
     await AsyncStorage.multiRemove(['open_job', 'open_job_type', 'open_job_id']);
+    // Restore ready state so DriverHome resumes waiting without a second ad/mark-ready
+    supabase.from('driver_profiles').update({ ready_for_rides: true }).eq('id', account.id).then(() => {});
     navigation.reset({
       index: 0,
       routes: [{ name: 'DriverHome' }],
@@ -156,7 +164,7 @@ export default function DriverRideScreen({ navigation, route }) {
         <View style={styles.infoRow}>
           <View style={styles.infoItem}>
             <Text style={styles.infoLabel}>{t('driverRide.distance').toUpperCase()}</Text>
-            <Text style={styles.infoValue}>{job.initial_distance_km?.toFixed(1)} km</Text>
+            <Text style={styles.infoValue}>{formatDistance(job.initial_distance_km)}</Text>
           </View>
           {job.client_notes ? (
             <View style={styles.infoItem}>
@@ -170,17 +178,20 @@ export default function DriverRideScreen({ navigation, route }) {
       {/* Complete button — only visible in geofence */}
       <SafeAreaView style={styles.footer} edges={['bottom']}>
         {canComplete ? (
-          <TouchableOpacity
-            style={[styles.completeBtn, completing && styles.completeBtnDisabled]}
-            onPress={handleMarkComplete}
-            disabled={completing}
-          >
-            <Text style={styles.completeBtnText}>
-              {completing
-                ? t('driverRide.completing').toUpperCase()
-                : t('driverRide.markComplete').toUpperCase()}
-            </Text>
-          </TouchableOpacity>
+          <>
+            <Text style={styles.distanceReminder}>{t('driverRide.distanceReminder')}</Text>
+            <AnimatedPressButton
+              style={[styles.completeBtn, completing && styles.completeBtnDisabled]}
+              onPress={handleMarkComplete}
+              disabled={completing}
+            >
+              <Text style={styles.completeBtnText}>
+                {completing
+                  ? t('driverRide.completing').toUpperCase()
+                  : t('driverRide.markComplete').toUpperCase()}
+              </Text>
+            </AnimatedPressButton>
+          </>
         ) : (
           <View style={styles.waitingBtn}>
             <Text style={styles.waitingBtnText}>
@@ -231,6 +242,14 @@ const makeStyles = (colors) => StyleSheet.create({
     backgroundColor:   colors.background,
     borderTopWidth:     1,
     borderTopColor:    colors.border,
+  },
+  distanceReminder: {
+    fontSize:      11,
+    color:         colors.textSecondary,
+    textAlign:     'center',
+    lineHeight:    16,
+    marginBottom:  10,
+    letterSpacing:  0.3,
   },
   completeBtn: {
     backgroundColor: colors.primary,

@@ -124,7 +124,7 @@ const makeStyles = (colors) => StyleSheet.create({
   root:    { flex: 1, backgroundColor: colors.background },
   hero:    { backgroundColor: colors.hero, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 14 },
   backBtn: { marginBottom: 6 },
-  backText:{ fontSize: 11, color: colors.mutedOnDark, letterSpacing: 1.5, fontWeight: '500' },
+  backText:{ fontSize: 11, color: '#ffffff', letterSpacing: 1.5, fontWeight: '500' },
   heroTitle: { fontSize: 18, fontWeight: '500', color: colors.onDark, letterSpacing: 2 },
 
   content: { flex: 1, padding: 20 },

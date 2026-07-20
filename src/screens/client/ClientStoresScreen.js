@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../config/supabase';
-import { requestLocationPermission, getCurrentLocation } from '../../services/locationService';
+import { requestLocationPermission, getCurrentLocation, formatDistance, formatHour } from '../../services/locationService';
 import { useThemeColors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
 
@@ -111,10 +111,10 @@ export default function ClientStoresScreen({ navigation }) {
             )}
           </View>
           <Text style={styles.storeDistance}>
-            {t('clientStores.kmAway', { distance: item.distance_km.toFixed(1) })}
+            {t('clientStores.kmAway', { distance: formatDistance(item.distance_km) })}
           </Text>
           <Text style={styles.storeHours}>
-            {item.open_hour?.slice(0,5)} – {item.close_hour?.slice(0,5)}
+            {formatHour(item.open_hour)} – {formatHour(item.close_hour)}
           </Text>
         </View>
 
@@ -190,7 +190,7 @@ const makeStyles = (colors) => StyleSheet.create({
   },
   heroTitle:    { fontSize: 14, fontWeight: '500', color: colors.onDark, letterSpacing: 2 },
   heroBackBtn:  { width: 60 },
-  heroBackText: { fontSize: 11, fontWeight: '500', color: colors.mutedOnDark, letterSpacing: 1.5 },
+  heroBackText: { fontSize: 11, fontWeight: '500', color: '#ffffff', letterSpacing: 1.5 },
 
   // Warning banner
   notice: {

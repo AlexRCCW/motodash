@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
     paddingBottom:     4,
   },
   heroBackBtn:  { width: 56 },
-  heroBackText: { fontSize: 11, fontWeight: '500', color: colors.mutedOnDark, letterSpacing: 1.5 },
+  heroBackText: { fontSize: 11, fontWeight: '500', color: '#ffffff', letterSpacing: 1.5 },
   heroCenter:   { flex: 1, alignItems: 'center' },
   heroTitle:    { fontSize: 14, fontWeight: '500', color: colors.onDark, letterSpacing: 2 },
   heroSubtitle: { fontSize: 11, color: colors.mutedOnDark, marginTop: 2 },

@@ -20,6 +20,7 @@ import {
 } from '../../services/jobService';
 import { colors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
+import AnimatedPressButton from '../../components/AnimatedPressButton';
 
 // ── Status display config ─────────────────────────────────────
 
@@ -78,11 +79,11 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
     // Load assigned driver name when one is set
     if (jobData.driver_id) {
       const { data: dp } = await supabase
-        .from('driver_profiles')
-        .select('driver_name')
+        .from('accounts')
+        .select('name')
         .eq('id', jobData.driver_id)
         .single();
-      setAssignedDriver(dp?.driver_name ?? null);
+      setAssignedDriver(dp?.name ?? null);
     } else {
       setAssignedDriver(null);
     }
@@ -127,10 +128,22 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
   }
 
   function toggleItemState(idx, state) {
-    setItemStates(prev => ({
-      ...prev,
-      [idx]: prev[idx] === state ? null : state,
-    }));
+    const newStates = {
+      ...itemStates,
+      [idx]: itemStates[idx] === state ? null : state,
+    };
+    setItemStates(newStates);
+
+    if (Array.isArray(job?.items)) {
+      const newTotal = job.items.reduce((sum, item, i) => {
+        if (newStates[i] === 'unavailable') return sum;
+        const price = item.isOther
+          ? (parseFloat(otherPrices[i]) || 0)
+          : Number(item.price);
+        return sum + price * (item.qty ?? 1);
+      }, 0);
+      setOrderTotal(newTotal > 0 ? newTotal.toFixed(2) : '0.00');
+    }
   }
 
   // ── Actions ─────────────────────────────────────────────────
@@ -150,12 +163,13 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
         {
           text: t('storeOrder.yesMarkReady'),
           onPress: async () => {
-            // Build updated items array — inject store prices into other items
+            // Build updated items array — inject store prices and unavailable flags
             const updatedItems = (job?.items ?? []).map((item, idx) => {
+              const unavailable = itemStates[idx] === 'unavailable';
               if (item.isOther && otherPrices[idx] != null) {
-                return { ...item, price: parseFloat(otherPrices[idx]) || 0 };
+                return { ...item, price: parseFloat(otherPrices[idx]) || 0, unavailable };
               }
-              return item;
+              return { ...item, unavailable };
             });
             const { error } = await markOrderReady(jobId, total, updatedItems);
             if (error) {
@@ -287,16 +301,24 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
     return (
       <View style={styles.card}>
         <Text style={styles.cardLabel}>{t('storeOrder.items').toUpperCase()}</Text>
-        {items.map((item, idx) => (
-          <View key={idx} style={styles.itemRow}>
+        {items.map((item, idx) => {
+          const unavailable = isPending
+            ? itemStates[idx] === 'unavailable'
+            : !!item.unavailable;
+          return (
+          <View key={idx} style={[styles.itemRow, unavailable && styles.itemRowUnavailable]}>
             <View style={styles.itemInfo}>
-              <Text style={styles.itemName}>
+              <Text style={[styles.itemName, unavailable && styles.itemTextUnavailable]}>
                 {item.name}
                 {item.qty > 1 ? <Text style={styles.itemQty}> ×{item.qty}</Text> : null}
               </Text>
-              <Text style={styles.itemPrice}>
-                ${(Number(item.price) * (item.qty ?? 1)).toFixed(2)}
-              </Text>
+              {unavailable ? (
+                <Text style={styles.itemUnavailableLabel}>{t('storeOrder.unavailable').toUpperCase()}</Text>
+              ) : (
+                <Text style={styles.itemPrice}>
+                  ${(Number(item.price) * (item.qty ?? 1)).toFixed(2)}
+                </Text>
+              )}
             </View>
             {isPending && (
               <View>
@@ -307,7 +329,19 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
                     <TextInput
                       style={styles.otherPriceInput}
                       value={otherPrices[idx] ?? ''}
-                      onChangeText={v => setOtherPrices(prev => ({ ...prev, [idx]: v }))}
+                      onChangeText={v => {
+                        const newPrices = { ...otherPrices, [idx]: v };
+                        setOtherPrices(newPrices);
+                        if (!Array.isArray(job?.items)) return;
+                        const newTotal = job.items.reduce((sum, item, i) => {
+                          if (itemStates[i] === 'unavailable') return sum;
+                          const price = item.isOther
+                            ? (parseFloat(newPrices[i]) || 0)
+                            : Number(item.price);
+                          return sum + price * (item.qty ?? 1);
+                        }, 0);
+                        setOrderTotal(newTotal > 0 ? newTotal.toFixed(2) : '0.00');
+                      }}
                       keyboardType="decimal-pad"
                       placeholder="0.00"
                       placeholderTextColor={colors.textSecondary}
@@ -347,7 +381,8 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
               </View>
             )}
           </View>
-        ))}
+          );
+        })}
       </View>
     );
   }
@@ -360,7 +395,7 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
     if (status === 'pending') {
       return (
         <View style={{ gap: 10 }}>
-          <TouchableOpacity
+          <AnimatedPressButton
             style={[styles.primaryBtn, submitting && styles.primaryBtnDisabled]}
             onPress={handleMarkReady}
             disabled={submitting}
@@ -369,14 +404,14 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
               ? <ActivityIndicator color={colors.onDark} />
               : <Text style={styles.primaryBtnText}>{t('storeOrder.readyForDelivery').toUpperCase()}</Text>
             }
-          </TouchableOpacity>
-          <TouchableOpacity
+          </AnimatedPressButton>
+          <AnimatedPressButton
             style={[styles.cancelOrderBtn, submitting && styles.primaryBtnDisabled]}
             onPress={handleCancelOrder}
             disabled={submitting}
           >
             <Text style={styles.cancelOrderBtnText}>{t('storeOrder.cancelOrder').toUpperCase()}</Text>
-          </TouchableOpacity>
+          </AnimatedPressButton>
         </View>
       );
     }
@@ -444,22 +479,22 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
           )}
 
           {/* Post to pool */}
-          <TouchableOpacity
+          <AnimatedPressButton
             style={[styles.primaryBtn, submitting && styles.primaryBtnDisabled]}
             onPress={handlePostToPool}
             disabled={submitting}
           >
             <Text style={styles.primaryBtnText}>{t('storeOrder.postToPool').toUpperCase()}</Text>
-          </TouchableOpacity>
+          </AnimatedPressButton>
 
           {/* Cancel — available until driver picks up */}
-          <TouchableOpacity
+          <AnimatedPressButton
             style={[styles.cancelOrderBtn, submitting && styles.primaryBtnDisabled]}
             onPress={handleCancelOrder}
             disabled={submitting}
           >
             <Text style={styles.cancelOrderBtnText}>{t('storeOrder.cancelOrder').toUpperCase()}</Text>
-          </TouchableOpacity>
+          </AnimatedPressButton>
         </View>
       );
     }
@@ -471,7 +506,7 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
           <View style={styles.statusInfoBox}>
             <Text style={styles.statusInfoText}>{t('storeOrder.driverEnRoute').toUpperCase()}</Text>
           </View>
-          <TouchableOpacity
+          <AnimatedPressButton
             style={[styles.cancelOrderBtn, submitting && styles.primaryBtnDisabled]}
             onPress={handleReassign}
             disabled={submitting}
@@ -482,7 +517,7 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
                   {t('storeOrder.reassignDriver').toUpperCase()}
                 </Text>
             }
-          </TouchableOpacity>
+          </AnimatedPressButton>
         </View>
       );
     }
@@ -508,7 +543,7 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
         );
       }
       return (
-        <TouchableOpacity
+        <AnimatedPressButton
           style={[styles.primaryBtn, submitting && styles.primaryBtnDisabled]}
           onPress={handleMarkPaid}
           disabled={submitting}
@@ -517,7 +552,7 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
             ? <ActivityIndicator color={colors.onDark} />
             : <Text style={styles.primaryBtnText}>{t('storeOrder.markPaid').toUpperCase()}</Text>
           }
-        </TouchableOpacity>
+        </AnimatedPressButton>
       );
     }
 
@@ -652,22 +687,22 @@ export default function StoreOrderDetailScreen({ route, navigation }) {
               autoFocus
             />
             <View style={styles.cancelInputRow}>
-              <TouchableOpacity
+              <AnimatedPressButton
                 style={styles.cancelInputDismiss}
                 onPress={() => setShowCancelInput(false)}
               >
                 <Text style={styles.cancelInputDismissText}>
                   {t('shared.cancel').toUpperCase()}
                 </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
+              </AnimatedPressButton>
+              <AnimatedPressButton
                 style={styles.cancelInputConfirm}
                 onPress={submitCancelOrder}
               >
                 <Text style={styles.cancelInputConfirmText}>
                   {(t('storeOrder.yesCancelOrder') || 'Cancel Order').toUpperCase()}
                 </Text>
-              </TouchableOpacity>
+              </AnimatedPressButton>
             </View>
           </View>
         )}
@@ -699,7 +734,7 @@ const styles = StyleSheet.create({
     gap:               8,
   },
   heroBackBtn:  { width: 60 },
-  heroBackText: { fontSize: 11, fontWeight: '500', color: colors.mutedOnDark, letterSpacing: 1.5 },
+  heroBackText: { fontSize: 11, fontWeight: '500', color: '#ffffff', letterSpacing: 1.5 },
   heroTitle:    { flex: 1, fontSize: 14, fontWeight: '500', color: colors.onDark, letterSpacing: 2 },
   heroBadge:    { fontSize: 10, fontWeight: '500', letterSpacing: 1.5, color: colors.mutedOnDark },
 
@@ -759,6 +794,15 @@ const styles = StyleSheet.create({
 
   // Items
   itemRow: { marginBottom: 10 },
+  itemRowUnavailable: { opacity: 0.4 },
+  itemTextUnavailable: { textDecorationLine: 'line-through', color: colors.textSecondary },
+  itemUnavailableLabel: {
+    fontSize:      11,
+    fontWeight:    '500',
+    color:         colors.textSecondary,
+    letterSpacing:  1,
+    textTransform: 'uppercase',
+  },
   itemInfo: {
     flexDirection:  'row',
     justifyContent: 'space-between',

@@ -11,6 +11,7 @@ import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../config/supabase';
 import { colors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
+import { formatHour, to24h } from '../../services/locationService';
 
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
@@ -22,8 +23,8 @@ export default function StoreProfileScreen({ navigation }) {
   const [photoUri,      setPhotoUri]      = useState(null);
   const [photoBase64,   setPhotoBase64]   = useState(null);
   const [currentPhoto,  setCurrentPhoto]  = useState(null);
-  const [openHour,      setOpenHour]      = useState('08:00');
-  const [closeHour,     setCloseHour]     = useState('20:00');
+  const [openHour,      setOpenHour]      = useState('8:00 AM');
+  const [closeHour,     setCloseHour]     = useState('8:00 PM');
   const [daysOpen,      setDaysOpen]      = useState([]);
 
   useEffect(() => {
@@ -39,8 +40,8 @@ export default function StoreProfileScreen({ navigation }) {
 
     if (!error && data) {
       setCurrentPhoto(data.storefront_image_url ?? null);
-      setOpenHour(data.open_hour  ?? '08:00');
-      setCloseHour(data.close_hour ?? '20:00');
+      setOpenHour(formatHour(data.open_hour  ?? '08:00'));
+      setCloseHour(formatHour(data.close_hour ?? '20:00'));
       setDaysOpen(data.days_open  ?? []);
     }
     setLoading(false);
@@ -102,8 +103,8 @@ export default function StoreProfileScreen({ navigation }) {
     setSaving(true);
 
     const updates = {
-      open_hour:  openHour,
-      close_hour: closeHour,
+      open_hour:  to24h(openHour),
+      close_hour: to24h(closeHour),
       days_open:  daysOpen,
     };
 
@@ -205,7 +206,8 @@ export default function StoreProfileScreen({ navigation }) {
                 style={s.hourInput}
                 value={openHour}
                 onChangeText={setOpenHour}
-                placeholder="08:00"
+                placeholder="8:00 AM"
+                autoCapitalize="characters"
                 placeholderTextColor={colors.textSecondary}
                 keyboardType="numbers-and-punctuation"
               />
@@ -217,7 +219,8 @@ export default function StoreProfileScreen({ navigation }) {
                 style={s.hourInput}
                 value={closeHour}
                 onChangeText={setCloseHour}
-                placeholder="20:00"
+                placeholder="8:00 PM"
+                autoCapitalize="characters"
                 placeholderTextColor={colors.textSecondary}
                 keyboardType="numbers-and-punctuation"
               />
@@ -291,7 +294,7 @@ const s = StyleSheet.create({
   },
   heroTitle:    { fontSize: 18, fontWeight: '500', color: colors.onDark, letterSpacing: 2 },
   heroBack:     { width: 60 },
-  heroBackText: { fontSize: 11, fontWeight: '500', color: colors.mutedOnDark, letterSpacing: 1.5 },
+  heroBackText: { fontSize: 11, fontWeight: '500', color: '#ffffff', letterSpacing: 1.5 },
 
   sectionLabel: {
     fontSize: 11, fontWeight: '500', color: colors.textSecondary,

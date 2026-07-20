@@ -166,7 +166,7 @@ const makeStyles = (colors) => StyleSheet.create({
     borderRadius:      radius.sm,
     backgroundColor:  'rgba(255,255,255,0.07)',
   },
-  heroBtnText:    { fontSize: 10, fontWeight: '500', color: colors.mutedOnDark, letterSpacing: 1.5 },
+  heroBtnText:    { fontSize: 10, fontWeight: '500', color: '#ffffff', letterSpacing: 1.5 },
   heroBtnRed:     { backgroundColor: 'rgba(192,57,43,0.18)' },
   heroBtnRedText: { color: colors.primary },
 

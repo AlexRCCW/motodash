@@ -9,14 +9,14 @@ import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { register } from '../../services/authService';
+import { to24h } from '../../services/locationService';
 import { uploadStorefrontPhoto } from '../../services/jobService';
 import { getDeviceId } from '../../services/deviceService';
 import { supabase } from '../../config/supabase';
 import { t } from '../../i18n';
+import AnimatedPressButton from '../../components/AnimatedPressButton';
 
 const ACCOUNT_TYPE_KEYS = ['client', 'driver', 'store'];
-
-const DR_AREA_CODES = ['809', '829', '849'];
 
 const COUNTRY_CODES = [
   { code: '+1',   flag: '🇩🇴', name: 'DR / US / PR' },
@@ -48,10 +48,7 @@ function localDigits(localPhone) {
 
 function isValidPhone(countryCode, local) {
   const digits = localDigits(local);
-  if (countryCode === '+1') {
-    if (digits.length !== 10) return false;
-    return DR_AREA_CODES.includes(digits.slice(0, 3));
-  }
+  if (countryCode === '+1') return digits.length === 10;
   return digits.length >= 7;
 }
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
@@ -95,8 +92,8 @@ export default function RegisterScreen({ navigation }) {
   // Store fields
   const [storeType, setStoreType]   = useState(null);
   const [storeName, setStoreName]   = useState('');
-  const [openHour, setOpenHour]     = useState('08:00');
-  const [closeHour, setCloseHour]   = useState('20:00');
+  const [openHour, setOpenHour]     = useState('8:00 AM');
+  const [closeHour, setCloseHour]   = useState('8:00 PM');
   const [daysOpen, setDaysOpen]     = useState([]);
   const [storeLat, setStoreLat]     = useState(null);
   const [storeLng, setStoreLng]     = useState(null);
@@ -261,7 +258,7 @@ export default function RegisterScreen({ navigation }) {
     const profile = accountType === 'driver'
       ? { motorcycleType, cedulaNumber, acceptsRides, acceptsDeliveries }
       : accountType === 'store'
-      ? { storeType, storeName, openHour, closeHour, daysOpen, locationLat: storeLat, locationLng: storeLng }
+      ? { storeType, storeName, openHour: to24h(openHour), closeHour: to24h(closeHour), daysOpen, locationLat: storeLat, locationLng: storeLng }
       : {};
 
     const { userId, error } = await register(base, profile);
@@ -309,13 +306,13 @@ export default function RegisterScreen({ navigation }) {
             <Text style={styles.typeDesc}>{t('register.' + key + 'Desc')}</Text>
           </TouchableOpacity>
         ))}
-        <TouchableOpacity
+        <AnimatedPressButton
           style={[styles.button, !accountType && styles.buttonDisabled]}
           disabled={!accountType}
           onPress={() => setStep('form')}
         >
           <Text style={styles.buttonText}>{t('auth.continue')}</Text>
-        </TouchableOpacity>
+        </AnimatedPressButton>
         <TouchableOpacity style={styles.link} onPress={() => navigation.goBack()}>
           <Text style={styles.linkText}>{t('auth.back')}</Text>
         </TouchableOpacity>
@@ -492,9 +489,9 @@ export default function RegisterScreen({ navigation }) {
           <TextInput style={styles.input} placeholder={t('register.storeName')} placeholderTextColor="#999"
             value={storeName} onChangeText={setStoreName} />
           <TextInput style={styles.input} placeholder={t('register.openingHour')} placeholderTextColor="#999"
-            value={openHour} onChangeText={setOpenHour} />
+            value={openHour} onChangeText={setOpenHour} autoCapitalize="characters" />
           <TextInput style={styles.input} placeholder={t('register.closingHour')} placeholderTextColor="#999"
-            value={closeHour} onChangeText={setCloseHour} />
+            value={closeHour} onChangeText={setCloseHour} autoCapitalize="characters" />
 
           {/* ── Days open ── */}
           <Text style={styles.sectionLabel}>{t('register.daysOpen')}</Text>
@@ -562,7 +559,7 @@ export default function RegisterScreen({ navigation }) {
       )}
 
       {/* Submit */}
-      <TouchableOpacity
+      <AnimatedPressButton
         style={[styles.button, loading && styles.buttonDisabled]}
         onPress={handleRegister}
         disabled={loading}
@@ -571,7 +568,7 @@ export default function RegisterScreen({ navigation }) {
           ? <ActivityIndicator color="#fff" />
           : <Text style={styles.buttonText}>{t('auth.createAccount')}</Text>
         }
-      </TouchableOpacity>
+      </AnimatedPressButton>
 
       <TouchableOpacity style={styles.link} onPress={() => setStep('type')}>
         <Text style={styles.linkText}>{t('auth.back')}</Text>

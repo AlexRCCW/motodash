@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
   TouchableOpacity, TextInput, Alert,
-  ActivityIndicator, Linking,
+  ActivityIndicator, Linking, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
@@ -10,7 +10,7 @@ import MapMarkerPin from '../../components/MapMarkerPin';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../config/supabase';
-import { markDeliveryCompleteClient, cancelDeliveryOrder, submitDriverRating, dispatchJob } from '../../services/jobService';
+import { markDeliveryCompleteClient, cancelDeliveryOrder, submitDriverRating } from '../../services/jobService';
 import RatingModal from '../../components/RatingModal';
 import { useThemeColors, SlashDivider, radius } from '../../theme';
 import { t } from '../../i18n';
@@ -38,7 +38,6 @@ export default function ClientOrderScreen({ navigation, route }) {
   const [completing,     setCompleting]     = useState(false);
   const [showRating,     setShowRating]     = useState(false);
   const ratingResolveRef = useRef(null);
-  const [adShownWaiting, setAdShownWaiting] = useState(false);
   const [secondsWaiting, setSecondsWaiting] = useState(0);
   const [canceling,      setCanceling]      = useState(false);
   const cancelTimerRef = useRef(null);
@@ -79,10 +78,6 @@ export default function ClientOrderScreen({ navigation, route }) {
         filter: `id=eq.${job.id}`,
       }, payload => {
         setJob(payload.new);
-        if (payload.new.status === 'out_for_delivery' && !adShownWaiting) {
-          setAdShownWaiting(true);
-          showInterstitial();
-        }
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
@@ -110,8 +105,9 @@ export default function ClientOrderScreen({ navigation, route }) {
   async function handlePlaceOrder() {
     if (!store || !clientLocation || !orderItems?.length) return;
     setPlacing(true);
+    const orderPromise = doPlaceOrder();
     await showInterstitial();
-    await doPlaceOrder();
+    await orderPromise;
   }
 
   async function doPlaceOrder() {
@@ -140,8 +136,6 @@ export default function ClientOrderScreen({ navigation, route }) {
     await AsyncStorage.setItem('open_job', 'true');
     await AsyncStorage.setItem('open_job_type', 'delivery');
     await AsyncStorage.setItem('open_job_id', data.id);
-    // Notify nearby drivers via Edge Function (fire-and-forget)
-    dispatchJob(data.id, 'delivery').catch(e => console.error('dispatch-job error:', e));
   }
 
   async function handleCancelOrder() {
@@ -171,15 +165,27 @@ export default function ClientOrderScreen({ navigation, route }) {
 
   async function handleMarkReceived() {
     setCompleting(true);
-    await showInterstitial();
 
-    // Collect rating before marking complete
+    // DB write first — so retry never re-shows the ad or rating modal
+    const { error } = await markDeliveryCompleteClient(job.id);
+    if (error) {
+      Alert.alert(t('shared.error'), t('clientOrder.completeOrderError'),
+        [{ text: t('shared.retry'), onPress: () => handleMarkReceived() }]
+      );
+      setCompleting(false);
+      return;
+    }
+
+    await AsyncStorage.multiRemove(['open_job', 'open_job_type', 'open_job_id']);
+
+    // Ad plays concurrently while rating modal is shown
+    showInterstitial().catch(() => {});
+
     const ratingResult = await new Promise(resolve => {
       ratingResolveRef.current = resolve;
       setShowRating(true);
     });
 
-    // Fire-and-forget — don't block the completion flow
     if (job?.driver_id) {
       submitDriverRating({
         driverId:   job.driver_id,
@@ -191,15 +197,6 @@ export default function ClientOrderScreen({ navigation, route }) {
       }).catch(() => {});
     }
 
-    const { error } = await markDeliveryCompleteClient(job.id);
-    if (error) {
-      Alert.alert(t('shared.error'), t('clientOrder.completeOrderError'),
-        [{ text: t('shared.retry'), onPress: () => handleMarkReceived() }]
-      );
-      setCompleting(false);
-      return;
-    }
-    await AsyncStorage.multiRemove(['open_job', 'open_job_type', 'open_job_id']);
     navigation.replace('ClientHome');
   }
 
@@ -220,7 +217,10 @@ export default function ClientOrderScreen({ navigation, route }) {
   const allItems     = orderItems || job?.items || [];
 
   return (
-    <View style={styles.root}>
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
 
       {/* ── Hero panel ── */}
       <SafeAreaView style={styles.hero} edges={['top']}>
@@ -314,22 +314,28 @@ export default function ClientOrderScreen({ navigation, route }) {
 
         {/* Order items */}
         <Text style={styles.sectionTitle}>{t('clientOrder.orderItems').toUpperCase()}</Text>
-        {allItems.map((item, i) => (
-          <View key={i} style={styles.itemRow}>
-            <View style={styles.itemNameCol}>
-              <Text style={styles.itemName}>{item.name}</Text>
-              {item.isOther && (
-                <Text style={styles.itemCustomTag}>{t('storeOrder.customItem').toUpperCase()}</Text>
-              )}
+        {allItems.map((item, i) => {
+          const unavailable = isPlaced && item.unavailable === true;
+          return (
+            <View key={i} style={[styles.itemRow, unavailable && { opacity: 0.4 }]}>
+              <View style={styles.itemNameCol}>
+                <Text style={[styles.itemName, unavailable && styles.itemNameStruck]}>{item.name}</Text>
+                {item.isOther && (
+                  <Text style={styles.itemCustomTag}>{t('storeOrder.customItem').toUpperCase()}</Text>
+                )}
+                {unavailable && (
+                  <Text style={styles.itemUnavailableTag}>{t('storeOrder.unavailable').toUpperCase()}</Text>
+                )}
+              </View>
+              <Text style={styles.itemQty}>×{item.qty}</Text>
+              <Text style={[styles.itemPrice, (item.isOther && item.price === 0) && styles.itemPriceTBD, unavailable && styles.itemPriceStruck]}>
+                {item.isOther && item.price === 0
+                  ? t('clientInventory.otherItemTBD')
+                  : `$${(Number(item.price) * item.qty).toFixed(2)}`}
+              </Text>
             </View>
-            <Text style={styles.itemQty}>×{item.qty}</Text>
-            <Text style={[styles.itemPrice, item.isOther && item.price === 0 && styles.itemPriceTBD]}>
-              {item.isOther && item.price === 0
-                ? t('clientInventory.otherItemTBD')
-                : `$${(Number(item.price) * item.qty).toFixed(2)}`}
-            </Text>
-          </View>
-        ))}
+          );
+        })}
 
         {/* Notes input (pre-order) */}
         {!isPlaced && (
@@ -383,7 +389,7 @@ export default function ClientOrderScreen({ navigation, route }) {
           </TouchableOpacity>
         )}
 
-        {isPlaced && job?.status === 'out_for_delivery' && (
+        {isPlaced && ['out_for_delivery', 'delivered'].includes(job?.status) && !job?.client_complete && (
           <TouchableOpacity
             style={[styles.primaryBtn, completing && styles.primaryBtnDisabled]}
             onPress={handleMarkReceived}
@@ -393,7 +399,7 @@ export default function ClientOrderScreen({ navigation, route }) {
           </TouchableOpacity>
         )}
 
-        {isPlaced && !['out_for_delivery', 'delivered', 'canceled', 'returned'].includes(job?.status) && (
+        {isPlaced && !['out_for_delivery', 'delivered', 'canceled', 'returned', 'delivered'].includes(job?.status) && (
           <View style={styles.waitingPanel}>
             <Text style={styles.waitingText}>
               {job?.status === 'pending'
@@ -443,7 +449,7 @@ export default function ClientOrderScreen({ navigation, route }) {
 
       <RatingModal visible={showRating} onSubmit={handleRatingSubmit} />
 
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -462,7 +468,7 @@ const makeStyles = (colors) => StyleSheet.create({
   },
   heroTitle:    { fontSize: 13, fontWeight: '500', color: colors.onDark, letterSpacing: 2 },
   heroBackBtn:  { width: 60 },
-  heroBackText: { fontSize: 11, fontWeight: '500', color: colors.mutedOnDark, letterSpacing: 1.5 },
+  heroBackText: { fontSize: 11, fontWeight: '500', color: '#ffffff', letterSpacing: 1.5 },
 
   content: { padding: 16, paddingBottom: 24 },
 
@@ -562,6 +568,9 @@ const makeStyles = (colors) => StyleSheet.create({
   itemQty:    { fontSize: 14, color: colors.textSecondary, marginRight: 12 },
   itemPrice:  { fontSize: 15, fontWeight: '500', color: colors.primary },
   itemPriceTBD: { color: colors.textSecondary },
+  itemNameStruck:      { textDecorationLine: 'line-through' },
+  itemPriceStruck:     { textDecorationLine: 'line-through', color: colors.textSecondary },
+  itemUnavailableTag:  { fontSize: 10, color: colors.primary, letterSpacing: 1, marginTop: 2 },
 
   notesInput: {
     borderWidth:      1,

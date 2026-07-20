@@ -9,7 +9,7 @@ import MapMarkerPin from '../../components/MapMarkerPin';
 import { useAuth }        from '../../context/AuthContext';
 import { logout }         from '../../services/authService';
 import { supabase }       from '../../config/supabase';
-import { requestLocationPermission, getCurrentLocation } from '../../services/locationService';
+import { requestLocationPermission, getCurrentLocation, formatDistance } from '../../services/locationService';
 import {
   setDriverReady, setDriverNotReady, incrementDriverRefusals,
   acceptRideJob, acceptDeliveryJob, getDriverAverageRating, getDeliveryJob,
@@ -21,6 +21,7 @@ import { t } from '../../i18n';
 import { showPlayable } from '../../services/adService';
 import { isNoAdsActive } from '../../services/subscriptionService';
 import AdMessageOverlay from '../../components/AdMessageOverlay';
+import AnimatedPressButton from '../../components/AnimatedPressButton';
 
 const OFFER_TIMEOUT = 15;
 
@@ -36,14 +37,13 @@ export default function DriverHomeScreen({ navigation }) {
   const [showAdMsg,   setShowAdMsg]   = useState(false);
   const [avgRating,    setAvgRating]    = useState(null);
   const [ratingCount,  setRatingCount]  = useState(0);
-  const [strikes,      setStrikes]      = useState(0);
-  const [showRelocate, setShowRelocate] = useState(false);
-  const [relocating,   setRelocating]   = useState(false);
+  const [strikes,         setStrikes]         = useState(0);
+  const [cooldownDisplay, setCooldownDisplay] = useState(''); // '' = button available
+  const [relocating,      setRelocating]      = useState(false);
   const timerRef        = useRef(null);
   const adResolveRef    = useRef(null);
   const offerHandledRef = useRef(false);
-  const relocateTimerRef = useRef(null);
-  const waitingSinceRef  = useRef(null);
+  const cooldownRef     = useRef(null);
 
   useEffect(() => {
     offerHandledRef.current = false;
@@ -90,7 +90,7 @@ export default function DriverHomeScreen({ navigation }) {
     return () => {
       cleanup();
       if (timerRef.current) clearInterval(timerRef.current);
-      if (relocateTimerRef.current) clearTimeout(relocateTimerRef.current);
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
     };
   }, [account?.id]);
 
@@ -113,11 +113,13 @@ export default function DriverHomeScreen({ navigation }) {
     }
 
     // 2. Active delivery → go straight to delivery screen
+    // Include 'delivered' where driver hasn't completed yet (returned to store)
     const { data: delivery } = await supabase
       .from('delivery_jobs')
       .select('*')
       .eq('driver_id', account.id)
-      .eq('status', 'out_for_delivery')
+      .in('status', ['out_for_delivery', 'delivered'])
+      .eq('driver_complete', false)
       .maybeSingle();
 
     if (delivery) {
@@ -140,8 +142,8 @@ export default function DriverHomeScreen({ navigation }) {
         setLocation({ lat: profile.last_known_lat, lng: profile.last_known_lng });
       }
       setStatus('waiting');
-      startRelocateTimer();
-      // Silently refresh location after completing a job — driver may have moved
+      // Silently refresh location after returning from a completed job — driver may have moved.
+      // Start cooldown because location was just auto-updated; no need to manually update yet.
       getCurrentLocation().then(loc => {
         if (!loc) return;
         setLocation(loc);
@@ -150,23 +152,32 @@ export default function DriverHomeScreen({ navigation }) {
           last_known_lng: loc.lng,
           location_updated_at: new Date().toISOString(),
         }).eq('id', account.id).then(() => {});
+        startCooldown();
       }).catch(() => {});
     }
   }
 
-  function startRelocateTimer() {
-    if (relocateTimerRef.current) clearTimeout(relocateTimerRef.current);
-    setShowRelocate(false);
-    waitingSinceRef.current = Date.now();
-    relocateTimerRef.current = setTimeout(() => {
-      setShowRelocate(true);
-    }, 30 * 60 * 1000);
+  function startCooldown() {
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
+    const endsAt = Date.now() + 30 * 60 * 1000;
+    const tick = () => {
+      const rem = endsAt - Date.now();
+      if (rem <= 0) {
+        clearInterval(cooldownRef.current);
+        setCooldownDisplay('');
+      } else {
+        const m = Math.floor(rem / 60000);
+        const s = Math.floor((rem % 60000) / 1000);
+        setCooldownDisplay(`${m}:${s.toString().padStart(2, '0')}`);
+      }
+    };
+    tick();
+    cooldownRef.current = setInterval(tick, 1000);
   }
 
-  function resetRelocateTimer() {
-    if (relocateTimerRef.current) clearTimeout(relocateTimerRef.current);
-    setShowRelocate(false);
-    startRelocateTimer();
+  function clearCooldown() {
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
+    setCooldownDisplay('');
   }
 
   function renderRatingBadge() {
@@ -193,13 +204,21 @@ export default function DriverHomeScreen({ navigation }) {
 
   // ── Job offer ────────────────────────────────────────────────
 
-  function handleJobOffer(data) {
+  async function handleJobOffer(data) {
     try {
       if (!data?.type || !data?.job_id) {
         console.warn('handleJobOffer: invalid payload', JSON.stringify(data));
         return;
       }
-      resetRelocateTimer();
+      // Validate the job still exists and is pending — cached notifications can
+      // carry stale job IDs from previous sessions or cancelled test jobs.
+      const table = data.type === 'ride_offer' ? 'ride_jobs' : 'delivery_jobs';
+      const { data: job } = await supabase.from(table).select('status').eq('id', data.job_id).maybeSingle();
+      if (!job || job.status !== 'pending') {
+        console.warn('handleJobOffer: job no longer pending, ignoring stale offer', data.job_id);
+        offerHandledRef.current = false; // allow the next real offer through
+        return;
+      }
       Vibration.vibrate([0, 400, 150, 400, 150, 400]);
       if (timerRef.current) clearInterval(timerRef.current);
       setJobOffer(data);
@@ -229,12 +248,14 @@ export default function DriverHomeScreen({ navigation }) {
       setStatus('idle');
       setStrikes(0);
     }
-    // Try the next closest driver — exclude this one so they don't get re-offered
+    // Re-dispatch to next driver — carry forward all previously excluded drivers
     if (offer?.job_id && offer?.type) {
       const jobType = offer.type === 'ride_offer' ? 'ride' : 'delivery';
       const driverId = account?.id;
-      console.log('[dispatch] re-dispatching', jobType, offer.job_id, 'excluding', driverId);
-      dispatchJob(offer.job_id, jobType, driverId ? [driverId] : [])
+      const prior = Array.isArray(offer.excluded_driver_ids) ? offer.excluded_driver_ids : [];
+      const excluded = driverId ? [...prior, driverId] : prior;
+      console.log('[dispatch] re-dispatching', jobType, offer.job_id, 'excluding', excluded);
+      dispatchJob(offer.job_id, jobType, excluded)
         .then(({ error }) => { if (error) console.error('[dispatch] re-dispatch error:', error); })
         .catch(e => console.error('[dispatch] re-dispatch threw:', e));
     }
@@ -251,14 +272,23 @@ export default function DriverHomeScreen({ navigation }) {
     supabase.from('driver_profiles').update({ consecutive_refusals: 0 }).eq('id', account.id).then(() => {});
     const loc = await getCurrentLocation();
     const args = { jobId: offer.job_id, driverId: account.id, driverLat: loc?.lat, driverLng: loc?.lng };
-if (offer.type === 'ride_offer') {
+    if (offer.type === 'ride_offer') {
       const { data, error } = await acceptRideJob(args);
-      if (!error && data) navigation.navigate('DriverRide', { job: data });
-      else Alert.alert(t('driverHome.jobUnavailable'), t('driverHome.jobTaken'));
+      if (!error && data) {
+        // Mark not ready so dispatch skips this driver while they're on a job
+        supabase.from('driver_profiles').update({ ready_for_rides: false }).eq('id', account.id).then(() => {});
+        navigation.navigate('DriverRide', { job: data });
+      } else {
+        Alert.alert(t('driverHome.jobUnavailable'), t('driverHome.jobTaken'));
+      }
     } else {
       const { data, error } = await acceptDeliveryJob(args);
-      if (!error && data) navigation.navigate('DriverDelivery', { job: data });
-      else Alert.alert(t('driverHome.jobUnavailable'), t('driverHome.jobTaken'));
+      if (!error && data) {
+        supabase.from('driver_profiles').update({ ready_for_rides: false }).eq('id', account.id).then(() => {});
+        navigation.navigate('DriverDelivery', { job: data });
+      } else {
+        Alert.alert(t('driverHome.jobUnavailable'), t('driverHome.jobTaken'));
+      }
     }
   }
 
@@ -284,12 +314,10 @@ if (offer.type === 'ride_offer') {
     if (error) { Alert.alert(t('shared.error'), t('driverHome.statusUpdateError')); setStatus('idle'); return; }
     setStrikes(0);
     setStatus('waiting');
-    startRelocateTimer();
   }
 
   async function handleGoOffline() {
-    if (relocateTimerRef.current) clearTimeout(relocateTimerRef.current);
-    setShowRelocate(false);
+    clearCooldown();
     await setDriverNotReady(account.id);
     setStatus('idle');
     setLocation(null);
@@ -308,8 +336,7 @@ if (offer.type === 'ride_offer') {
       }).eq('id', account.id);
     }
     setRelocating(false);
-    setShowRelocate(false);
-    startRelocateTimer();
+    startCooldown();
   }
 
   async function handleSignOut() {
@@ -377,15 +404,15 @@ if (offer.type === 'ride_offer') {
               <Text style={s.offerTimerText}>{offerTimer}s</Text>
             </View>
             <Text style={s.offerDistance}>
-              {t('driverHome.kmAway', { distance: jobOffer?.distance != null ? parseFloat(jobOffer.distance).toFixed(1) : '?' })}
+              {t('driverHome.kmAway', { distance: jobOffer?.distance != null ? formatDistance(parseFloat(jobOffer.distance)) : '?' })}
             </Text>
             <View style={s.offerBtns}>
-              <TouchableOpacity style={s.declineBtn} onPress={() => handleRefuse(jobOffer)}>
+              <AnimatedPressButton style={s.declineBtn} onPress={() => handleRefuse(jobOffer)}>
                 <Text style={s.declineBtnText}>{t('driverHome.decline').toUpperCase()}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.acceptBtn} onPress={handleAccept}>
+              </AnimatedPressButton>
+              <AnimatedPressButton style={s.acceptBtn} onPress={handleAccept}>
                 <Text style={s.acceptBtnText}>{t('driverHome.accept').toUpperCase()}</Text>
-              </TouchableOpacity>
+              </AnimatedPressButton>
             </View>
           </View>
         </View>
@@ -490,16 +517,22 @@ if (offer.type === 'ride_offer') {
       {/* ── Footer action ── */}
       <SafeAreaView style={s.footer} edges={['bottom']}>
         {status === 'idle' && (
-          <TouchableOpacity style={s.primaryBtn} onPress={handleMarkReady}>
+          <AnimatedPressButton style={s.primaryBtn} onPress={handleMarkReady}>
             <Text style={s.primaryBtnText}>{t('driverHome.markReady').toUpperCase()}</Text>
-          </TouchableOpacity>
+          </AnimatedPressButton>
         )}
         {status === 'waiting' && (
           <>
-            <TouchableOpacity style={s.secondaryBtn} onPress={handleGoOffline}>
+            <AnimatedPressButton style={s.secondaryBtn} onPress={handleGoOffline}>
               <Text style={s.secondaryBtnText}>{t('driverHome.goOffline').toUpperCase()}</Text>
-            </TouchableOpacity>
-            {showRelocate && (
+            </AnimatedPressButton>
+            {cooldownDisplay ? (
+              <View style={s.relocateCooldown}>
+                <Text style={s.relocateCooldownText}>
+                  {t('driverHome.locationUpdateIn', { time: cooldownDisplay })}
+                </Text>
+              </View>
+            ) : (
               <TouchableOpacity
                 style={s.relocateLink}
                 onPress={handleRelocate}
@@ -752,6 +785,17 @@ const makeStyles = (colors) => StyleSheet.create({
     textAlign:     'center',
     lineHeight:    18,
     textDecorationLine: 'underline',
+  },
+  relocateCooldown: {
+    marginTop:  12,
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  relocateCooldownText: {
+    fontSize:  12,
+    color:     colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 18,
   },
 
   // ── Ad modal ──

@@ -246,7 +246,7 @@ const makeStyles = (colors) => StyleSheet.create({
   },
   heroTitle:    { fontSize: 16, fontWeight: '500', color: colors.onDark, letterSpacing: 2 },
   heroBackBtn:  { width: 60 },
-  heroBackText: { fontSize: 11, fontWeight: '500', color: colors.mutedOnDark, letterSpacing: 1.5 },
+  heroBackText: { fontSize: 11, fontWeight: '500', color: '#ffffff', letterSpacing: 1.5 },
 
   scroll:   { flex: 1 },
   content:  { padding: 16, paddingBottom: 40 },

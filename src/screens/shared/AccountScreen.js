@@ -9,6 +9,7 @@ import { useTheme, SlashDivider, radius } from '../../theme';
 import { supabase } from '../../config/supabase';
 import { t } from '../../i18n';
 import { isNoAdsActive, restorePurchases } from '../../services/subscriptionService';
+import AnimatedPressButton from '../../components/AnimatedPressButton';
 
 const MODES = ['auto', 'light', 'dark'];
 
@@ -162,7 +163,7 @@ export default function AccountScreen({ navigation }) {
             placeholderTextColor={colors.textSecondary}
             keyboardType="phone-pad"
           />
-          <TouchableOpacity
+          <AnimatedPressButton
             style={[styles.btn, styles.btnPrimary, savingPhone && styles.btnDisabled]}
             onPress={handleSavePhone}
             disabled={savingPhone}
@@ -171,7 +172,7 @@ export default function AccountScreen({ navigation }) {
               ? <ActivityIndicator color={colors.onDark} />
               : <Text style={styles.btnText}>{t('account.save').toUpperCase()}</Text>
             }
-          </TouchableOpacity>
+          </AnimatedPressButton>
         </View>
 
         {/* ── Password ── */}
@@ -193,7 +194,7 @@ export default function AccountScreen({ navigation }) {
             placeholderTextColor={colors.textSecondary}
             secureTextEntry
           />
-          <TouchableOpacity
+          <AnimatedPressButton
             style={[styles.btn, styles.btnPrimary, savingPw && styles.btnDisabled]}
             onPress={handleChangePassword}
             disabled={savingPw}
@@ -202,7 +203,7 @@ export default function AccountScreen({ navigation }) {
               ? <ActivityIndicator color={colors.onDark} />
               : <Text style={styles.btnText}>{t('account.updatePassword').toUpperCase()}</Text>
             }
-          </TouchableOpacity>
+          </AnimatedPressButton>
         </View>
 
         {/* ── Subscription ── */}
@@ -216,9 +217,9 @@ export default function AccountScreen({ navigation }) {
           </View>
           {subscribed ? (
             <>
-              <TouchableOpacity style={[styles.btn, styles.btnDanger]} onPress={handleCancelSubscription}>
+              <AnimatedPressButton style={[styles.btn, styles.btnDanger]} onPress={handleCancelSubscription}>
                 <Text style={styles.btnText}>{t('account.manageSubscription').toUpperCase()}</Text>
-              </TouchableOpacity>
+              </AnimatedPressButton>
               <TouchableOpacity
                 style={[styles.btn, styles.btnSecondary, restoring && styles.btnDisabled]}
                 onPress={handleRestore}
@@ -232,12 +233,12 @@ export default function AccountScreen({ navigation }) {
             </>
           ) : (
             <>
-              <TouchableOpacity
+              <AnimatedPressButton
                 style={[styles.btn, styles.btnPrimary]}
                 onPress={() => navigation.navigate('Subscription')}
               >
                 <Text style={styles.btnText}>{t('account.goAdFree').toUpperCase()}</Text>
-              </TouchableOpacity>
+              </AnimatedPressButton>
               <TouchableOpacity
                 style={[styles.btn, styles.btnSecondary, restoring && styles.btnDisabled]}
                 onPress={handleRestore}
@@ -306,7 +307,7 @@ const makeStyles = (colors) => StyleSheet.create({
   root:  { flex: 1, backgroundColor: colors.background },
   hero:  { backgroundColor: colors.hero, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 14 },
   backBtn:  { marginBottom: 6 },
-  backText: { fontSize: 11, color: colors.mutedOnDark, letterSpacing: 1.5, fontWeight: '500' },
+  backText: { fontSize: 11, color: '#ffffff', letterSpacing: 1.5, fontWeight: '500' },
   heroTitle:{ fontSize: 18, fontWeight: '500', color: colors.onDark, letterSpacing: 2 },
 
   scroll: { padding: 16 },

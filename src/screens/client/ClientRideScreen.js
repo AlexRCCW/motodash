@@ -8,7 +8,7 @@ import MapView, { Marker } from 'react-native-maps';
 import MapMarkerPin from '../../components/MapMarkerPin';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
-import { requestLocationPermission, getCurrentLocation } from '../../services/locationService';
+import { requestLocationPermission, getCurrentLocation, haversineMeters, formatDistance } from '../../services/locationService';
 import { createRideJob, cancelRideJob, markRideCompleteClient, getRideJob, dispatchJob, submitDriverRating } from '../../services/jobService';
 import { supabase } from '../../config/supabase';
 import { useThemeColors, SlashDivider, radius } from '../../theme';
@@ -16,6 +16,7 @@ import { t } from '../../i18n';
 import { showInterstitial } from '../../services/adService';
 import AdMessageOverlay from '../../components/AdMessageOverlay';
 import RatingModal from '../../components/RatingModal';
+import AnimatedPressButton from '../../components/AnimatedPressButton';
 
 export default function ClientRideScreen({ navigation, route }) {
   const { account } = useAuth();
@@ -220,7 +221,7 @@ export default function ClientRideScreen({ navigation, route }) {
             {!location ? (
               <ActivityIndicator style={{ marginBottom: 16 }} />
             ) : null}
-            <TouchableOpacity
+            <AnimatedPressButton
               style={[styles.primaryBtn, (!location || status === 'requesting') && styles.primaryBtnDisabled]}
               onPress={handleRequestRide}
               disabled={!location || status === 'requesting'}
@@ -229,7 +230,7 @@ export default function ClientRideScreen({ navigation, route }) {
                 ? <ActivityIndicator color={colors.onDark} />
                 : <Text style={styles.primaryBtnText}>{t('clientRide.requestRide').toUpperCase()}</Text>
               }
-            </TouchableOpacity>
+            </AnimatedPressButton>
             <TouchableOpacity
               style={styles.backBtn}
               onPress={() => navigation.goBack()}
@@ -250,26 +251,41 @@ export default function ClientRideScreen({ navigation, route }) {
           <>
             <Text style={styles.panelTitle}>{t('clientRide.lookingForDriver').toUpperCase()}</Text>
             <Text style={styles.statusSubtext}>{t('clientRide.willBeNotified')}</Text>
-            <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel}>
+            <AnimatedPressButton style={styles.cancelBtn} onPress={handleCancel}>
               <Text style={styles.cancelBtnText}>{t('clientRide.cancelRequest').toUpperCase()}</Text>
-            </TouchableOpacity>
+            </AnimatedPressButton>
           </>
         )}
 
         {status === 'accepted' && (
-          <>
-            <Text style={styles.panelTitle}>{t('clientRide.driverOnWay').toUpperCase()}</Text>
-            <Text style={styles.statusSubtext}>
-              {t('clientRide.driverAway', { distance: job?.initial_distance_km?.toFixed(1) })}
-            </Text>
-            <TouchableOpacity
-              style={[styles.primaryBtn, completing && styles.primaryBtnDisabled]}
-              onPress={handleMarkComplete}
-              disabled={completing}
-            >
-              <Text style={styles.primaryBtnText}>{t('clientRide.markComplete').toUpperCase()}</Text>
-            </TouchableOpacity>
-          </>
+          (() => {
+            const driverNear = job?.driver_lat && job?.driver_lng && job?.client_lat && job?.client_lng
+              ? haversineMeters(job.driver_lat, job.driver_lng, job.client_lat, job.client_lng) <= 250
+              : false;
+            return (
+              <>
+                <Text style={styles.panelTitle}>{t('clientRide.driverOnWay').toUpperCase()}</Text>
+                <Text style={styles.statusSubtext}>
+                  {driverNear
+                    ? t('clientRide.driverNearby')
+                    : t('clientRide.driverAway', { distance: formatDistance(job?.initial_distance_km) })}
+                </Text>
+                {driverNear ? (
+                  <AnimatedPressButton
+                    style={[styles.primaryBtn, completing && styles.primaryBtnDisabled]}
+                    onPress={handleMarkComplete}
+                    disabled={completing}
+                  >
+                    <Text style={styles.primaryBtnText}>{t('clientRide.markComplete').toUpperCase()}</Text>
+                  </AnimatedPressButton>
+                ) : (
+                  <View style={styles.waitingForDriver}>
+                    <Text style={styles.waitingForDriverText}>{t('clientRide.waitingForArrival')}</Text>
+                  </View>
+                )}
+              </>
+            );
+          })()
         )}
       </SafeAreaView>
     </View>
@@ -331,8 +347,23 @@ const makeStyles = (colors) => StyleSheet.create({
     fontSize:      13,
     letterSpacing:  2,
   },
+  waitingForDriver: {
+    backgroundColor: colors.surface,
+    borderRadius:    radius.md,
+    borderWidth:     1,
+    borderColor:     colors.border,
+    paddingVertical: 14,
+    alignItems:      'center',
+    marginBottom:    12,
+  },
+  waitingForDriverText: {
+    fontSize:      12,
+    color:         colors.textSecondary,
+    letterSpacing:  0.5,
+    textAlign:     'center',
+  },
   backBtn:     { alignItems: 'center', padding: 12 },
-  backBtnText: { color: colors.textSecondary, fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase' },
+  backBtnText: { color: '#ffffff', fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase' },
 
   // ── Ad modal ──
   adContainer: {

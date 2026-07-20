@@ -43,8 +43,8 @@ export default {
     deliveries: 'Deliveries',
     storeDetails: 'Store details',
     storeName: 'Store name',
-    openingHour: 'Opening hour (e.g. 08:00)',
-    closingHour: 'Closing hour (e.g. 20:00)',
+    openingHour: 'Opening hour (e.g. 8:00 AM)',
+    closingHour: 'Closing hour (e.g. 8:00 PM)',
     openHour: 'Open',
     closeHour: 'Close',
     daysOpen: 'Days open',
@@ -150,7 +150,7 @@ export default {
     willBeNotified: 'You will be notified when a driver accepts',
     cancelRequest: 'Cancel request',
     driverOnWay: 'Driver is on the way 🏍️',
-    driverAway: '%{distance} km away',
+    driverAway: '%{distance} away',
     markComplete: 'Mark ride complete',
     cancelRide: 'Cancel ride?',
     cancelConfirm: 'Are you sure you want to cancel this request?',
@@ -164,6 +164,8 @@ export default {
     error: 'Error',
     couldNotCreate: 'Could not create ride request. Please try again.',
     couldNotComplete: 'Could not complete the ride. Please try again.',
+    driverNearby: 'Your driver has arrived. Confirm your ride below.',
+    waitingForArrival: 'Mark Complete will appear when your driver arrives.',
   },
 
   // ── CLIENT STORES ─────────────────────────────────────────
@@ -175,7 +177,7 @@ export default {
     noStoresSubtext: 'Check back later or try from a different location',
     open: 'Open',
     closed: 'Closed',
-    kmAway: '%{distance} km away',
+    kmAway: '%{distance} away',
     storeClosed: 'Store closed',
     storeClosedMsg: '%{name} is currently closed.',
     locationRequired: 'Location required',
@@ -246,7 +248,7 @@ export default {
     refusedTooMany: 'You have refused 3 jobs in a row and have been marked as not ready.',
     rideOffer: '🏍️ Ride request',
     deliveryOffer: '📦 Delivery request',
-    kmAway: '%{distance} km away',
+    kmAway: '%{distance} away',
     accept: 'Accept',
     decline: 'Decline',
     jobUnavailable: 'Job no longer available',
@@ -256,6 +258,7 @@ export default {
     statusUpdateError: 'Could not update your status. Please try again.',
     relocate:  'Moved to a new area to find jobs? Tap here to update your location.',
     relocating: 'Updating location...',
+    locationUpdateIn: 'Location update available in %{time}',
   },
 
   // ── DRIVER RIDE ───────────────────────────────────────────
@@ -269,6 +272,7 @@ export default {
     error: 'Error',
     couldNotComplete: 'Could not mark the ride complete. Please try again.',
     retry: 'Retry',
+    distanceReminder: 'Wait until you have taken the client to their destination to get full distance credit for your stats.',
   },
 
   // ── DRIVER DELIVERY ───────────────────────────────────────

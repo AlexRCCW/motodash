@@ -10,15 +10,14 @@ import {
 } from 'react-native-google-mobile-ads';
 
 const IOS_IDS = {
-  interstitial:         'ca-app-pub-8920374804780183/4300660478',
-  rewarded:             'ca-app-pub-8920374804780183/6277187200',
-  rewardedInterstitial: 'ca-app-pub-8920374804780183/5613742148',
+  interstitial:         'ca-app-pub-5477937042308573/5922906900',
+  rewarded:             'ca-app-pub-5477937042308573/8165926865',
+  rewardedInterstitial: 'ca-app-pub-5477937042308573/3895509360',
 };
-// TODO: Add Android ad unit IDs once Android app is registered in AdMob
 const ANDROID_IDS = {
-  interstitial:         'ca-app-pub-REPLACE_ANDROID_APP_ID/REPLACE_INTERSTITIAL_UNIT',
-  rewarded:             'ca-app-pub-REPLACE_ANDROID_APP_ID/REPLACE_REWARDED_UNIT',
-  rewardedInterstitial: 'ca-app-pub-REPLACE_ANDROID_APP_ID/REPLACE_REWARDED_INTERSTITIAL_UNIT',
+  interstitial:         'ca-app-pub-5477937042308573/1635609316',
+  rewarded:             'ca-app-pub-5477937042308573/4153961444',
+  rewardedInterstitial: 'ca-app-pub-5477937042308573/2913600184',
 };
 
 const AD_LOAD_TIMEOUT_MS = 8000;

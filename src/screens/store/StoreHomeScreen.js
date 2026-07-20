@@ -30,7 +30,7 @@ function formatOrderTime(iso) {
   const d   = new Date(iso);
   const now = new Date();
   if (d.toDateString() === now.toDateString()) {
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
   }
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
     borderRadius:      radius.sm,
     backgroundColor:  'rgba(255,255,255,0.07)',
   },
-  heroBtnText:    { fontSize: 10, fontWeight: '500', color: colors.mutedOnDark, letterSpacing: 1.5 },
+  heroBtnText:    { fontSize: 10, fontWeight: '500', color: '#ffffff', letterSpacing: 1.5 },
   heroBtnRed:     { backgroundColor: 'rgba(192,57,43,0.18)' },
   heroBtnRedText: { color: colors.primary },
 

@@ -64,5 +64,5 @@ const styles = StyleSheet.create({
   bullet:          { width: 24, height: 24, borderRadius: 12, backgroundColor: '#2563eb', color: '#fff', textAlign: 'center', lineHeight: 24, fontSize: 13, fontWeight: '700', marginRight: 12, marginTop: 1 },
   itemText:        { flex: 1, fontSize: 15, color: '#333', lineHeight: 22 },
   back:            { margin: 20, backgroundColor: '#f3f4f6', borderRadius: 10, padding: 14, alignItems: 'center' },
-  backText:        { color: '#374151', fontWeight: '600', fontSize: 15 },
+  backText:        { color: '#ffffff', fontWeight: '600', fontSize: 15 },
 });
